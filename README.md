@@ -31,9 +31,27 @@ localStorage and exports are downloads.
 Or run it yourself:
 
 ```bash
-docker build -t geolibre-admin .
-docker run --rm -p 8080:80 geolibre-admin
+docker run --rm -p 8080:80 ghcr.io/opengeos/geolibre-admin
 ```
+
+Or run it with a local GeoLibre reference projects server:
+
+```bash
+docker compose up -d            # pull the admin image, build the server
+docker compose up -d --build    # build the admin image from this checkout
+```
+
+Open <http://localhost:8080/#/server> and connect to `http://localhost:8000`.
+The console has no sign-up, so create the first account on the server:
+
+```bash
+curl -X POST http://localhost:8000/api/accounts -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"correct horse battery staple"}'
+```
+
+The server port is bound to `127.0.0.1` and has no rate limiting, so this is a
+local stack, not a production deployment. Override ports with
+`GEOLIBRE_ADMIN_PORT` and `GEOLIBRE_SERVER_PORT`.
 
 The image serves the static build from nginx with a strict
 Content-Security-Policy. Its `connect-src` allows any HTTPS origin plus
@@ -92,7 +110,15 @@ npm run typecheck
 npm run build        # dist/
 ```
 
-Contract tests run the API client against a live, disposable projects server:
+Contract tests run the API client against a live, disposable projects server.
+With Docker, use the compose server:
+
+```bash
+docker compose up -d geolibre-server
+GEOLIBRE_TEST_SERVER_URL=http://127.0.0.1:8000 npx vitest run tests/server.integration.test.ts
+```
+
+Or install it with pip:
 
 ```bash
 pip install "geolibre-server-api @ git+https://github.com/opengeos/GeoLibre.git#subdirectory=backend/geolibre_server_api"

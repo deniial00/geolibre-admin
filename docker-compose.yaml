@@ -1,0 +1,49 @@
+# Run the admin UI against a local GeoLibre reference projects server.
+#
+#   docker compose up -d            # pull the published admin image
+#   docker compose up -d --build    # build the admin image from this checkout
+#
+# Then open http://localhost:8080/#/server and connect to http://localhost:8000.
+name: geolibre-admin
+
+services:
+  geolibre-admin:
+    image: ghcr.io/opengeos/geolibre-admin:latest
+    build: .
+    ports:
+      - "${GEOLIBRE_ADMIN_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      geolibre-server:
+        condition: service_healthy
+    restart: unless-stopped
+
+  geolibre-server:
+    # No published image yet; build GeoLibre's reference server from git.
+    build:
+      context: https://github.com/opengeos/GeoLibre.git#main:backend/geolibre_server_api
+    image: geolibre-server:local
+    # Loopback only: /api/accounts and /api/auth/token have no rate limiting.
+    ports:
+      - "127.0.0.1:${GEOLIBRE_SERVER_PORT:-8000}:8000"
+    environment:
+      # Browser-reachable URLs, not Compose service names.
+      GEOLIBRE_PUBLIC_URL: "${GEOLIBRE_PUBLIC_URL:-http://localhost:8000}"
+      GEOLIBRE_CORS_ORIGINS: "${GEOLIBRE_CORS_ORIGINS:-http://localhost:8080}"
+    volumes:
+      # The image creates /data owned by uid 1000 and keeps SQLite + objects there.
+      - geolibre-server:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  geolibre-server:
