@@ -1,5 +1,7 @@
 /**
- * The deployment policy document (`deployment.json`, version 1, draft).
+ * The deployment policy document (`deployment.json`, version 1). It mirrors
+ * GeoLibre's `schema/deployment.schema.json`; these types are hand-written to
+ * match, and a test fails when a schema key has no field here.
  *
  * Everything in it is published to every visitor of the deployment, so it
  * holds only client-facing settings. Secrets and infrastructure settings
@@ -37,6 +39,19 @@ export interface InterfacePolicy {
   hiddenMenuItems?: string[];
 }
 
+export interface PluginsPolicy {
+  /** Marketplace registry URL, absolute or relative to the app. */
+  registryUrl?: string;
+  /** External plugin ids allowed to load. Omitted allows any; `[]` allows none. */
+  allowed?: string[];
+  /** External plugin ids never loaded, even when also allowed. */
+  blocked?: string[];
+  /** `false` removes installing from a manifest URL, zip, directory or project file. */
+  sideload?: boolean;
+  /** Plugin ids active in a fresh project. */
+  defaultActive?: string[];
+}
+
 /** One entry of the curated service library (`GEOLIBRE_SERVICES_FILE`). */
 export interface ServiceEntry {
   id: string;
@@ -66,6 +81,13 @@ export interface GeoLensPolicy {
   url?: string;
 }
 
+export interface AiPolicy {
+  /** Expose the same-origin `/ai` assistant route (default false). */
+  enabled?: boolean;
+  /** Default assistant model id. */
+  model?: string;
+}
+
 export interface BrandingPolicy {
   appName?: string;
   /** `false` skips the first-launch welcome wizard (a build-time setting). */
@@ -78,9 +100,11 @@ export interface DeploymentPolicy {
   /** Omitted grants every capability; an empty list grants none. */
   capabilities?: Capability[];
   interface?: InterfacePolicy;
+  plugins?: PluginsPolicy;
   services?: ServicesPolicy;
   sharing?: SharingPolicy;
   geolens?: GeoLensPolicy;
+  ai?: AiPolicy;
   branding?: BrandingPolicy;
 }
 
@@ -98,7 +122,7 @@ export const DEFAULT_OPERATOR_SETTINGS: OperatorSettings = {
 };
 
 export const SCHEMA_URL =
-  "https://raw.githubusercontent.com/opengeos/geolibre-admin/main/schema/deployment.schema.json";
+  "https://raw.githubusercontent.com/opengeos/GeoLibre/main/schema/deployment.schema.json";
 
 /**
  * Create an empty policy, which leaves every GeoLibre default in place.

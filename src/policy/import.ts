@@ -46,6 +46,13 @@ export function parseEnv(text: string): Map<string, string> {
   return vars;
 }
 
+/** Lowercase the keywords and add the scheme older env files left off a bare host. */
+function normalizeGeoLensUrl(value: string): string {
+  const keyword = value.toLowerCase();
+  if (keyword === "off" || keyword === "same-origin") return keyword;
+  return /^[A-Za-z0-9.-]+(:\d+)?(\/.*)?$/.test(value) ? `https://${value}` : value;
+}
+
 /**
  * Turn environment variables into the equivalent policy and operator
  * settings. Variables the policy does not model are ignored.
@@ -74,13 +81,24 @@ export function policyFromEnv(vars: Map<string, string>): {
             ) as Capability[]);
   }
   const embed = get("GEOLIBRE_EMBED_ORIGINS");
+  const shareUrl = get("GEOLIBRE_SHARE_URL");
   const sharing = {
-    shareUrl: get("GEOLIBRE_SHARE_URL"),
+    // GeoLibre's schema only accepts a lowercase `off`; older env files used any case.
+    shareUrl: shareUrl?.toLowerCase() === "off" ? "off" : shareUrl,
     collabUrl: get("GEOLIBRE_COLLAB_URL"),
     embedOrigins: embed ? embed.replace(/,/g, " ").split(/\s+/).filter(Boolean) : undefined,
   };
   if (Object.values(sharing).some(Boolean)) policy.sharing = sharing;
-  if (get("GEOLIBRE_GEOLENS_URL")) policy.geolens = { url: get("GEOLIBRE_GEOLENS_URL") };
+  const geolensUrl = get("GEOLIBRE_GEOLENS_URL");
+  if (geolensUrl) policy.geolens = { url: normalizeGeoLensUrl(geolensUrl) };
+  const registryUrl = get("VITE_GEOLIBRE_PLUGIN_REGISTRY_URL");
+  if (registryUrl) policy.plugins = { registryUrl };
+  // The proxy URL and token are operator secrets and are deliberately not read.
+  const ai = {
+    enabled: get("GEOLIBRE_AI_URL") ? true : undefined,
+    model: get("GEOLIBRE_AI_MODEL"),
+  };
+  if (Object.values(ai).some((value) => value !== undefined)) policy.ai = ai;
   const appName = get("GEOLIBRE_APP_NAME") ?? get("VITE_GEOLIBRE_APP_NAME");
   const welcomeDisabled = get("VITE_WELCOME_DISABLED") === "1";
   if (appName || welcomeDisabled) {
@@ -140,6 +158,10 @@ function recognize(
         ...fromEnv.policy,
         interface: current.interface,
         services: { ...current.services, ...fromEnv.policy.services },
+        ...(fromEnv.policy.plugins && {
+          plugins: { ...current.plugins, ...fromEnv.policy.plugins },
+        }),
+        ...(fromEnv.policy.ai && { ai: { ...current.ai, ...fromEnv.policy.ai } }),
       },
       operator: fromEnv.operator,
       kind: "environment file",

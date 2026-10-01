@@ -80,6 +80,72 @@ function unknownIds(
   }
 }
 
+const BUILT_IN_PLUGINS = new Set(catalog.plugins.map((plugin) => plugin.id));
+
+function pluginIssues(issues: Issue[], doc: DeploymentPolicy) {
+  const plugins = doc.plugins;
+  if (!plugins) return;
+  const registry = plugins.registryUrl?.trim();
+  if (registry && /^[A-Za-z][A-Za-z0-9+.-]*:/.test(registry)) {
+    const problem = serviceUrlProblem(registry, "https", "http");
+    if (problem) {
+      issues.push({ severity: "error", path: "/plugins/registryUrl", message: `Registry URL ${problem}.` });
+    }
+  }
+  if (plugins.allowed?.length === 0) {
+    issues.push({ severity: "warning", path: "/plugins/allowed", message: "No external plugins may load." });
+  }
+  const allowed = plugins.allowed;
+  const blocked = plugins.blocked ?? [];
+  for (const list of ["allowed", "blocked"] as const) {
+    plugins[list]?.forEach((id, index) => {
+      if (BUILT_IN_PLUGINS.has(id)) {
+        issues.push({
+          severity: "warning",
+          path: `/plugins/${list}/${index}`,
+          message: `"${id}" is a built-in plugin; allowed and blocked only govern external plugins. Hide it under Interface instead.`,
+        });
+      }
+    });
+  }
+  blocked.forEach((id, index) => {
+    if (allowed?.includes(id)) {
+      issues.push({
+        severity: "warning",
+        path: `/plugins/blocked/${index}`,
+        message: `"${id}" is both allowed and blocked; blocked wins, so it never loads.`,
+      });
+    }
+  });
+  plugins.defaultActive?.forEach((id, index) => {
+    const path = `/plugins/defaultActive/${index}`;
+    if (blocked.includes(id)) {
+      issues.push({ severity: "warning", path, message: `"${id}" is blocked, so it can't start active.` });
+    } else if (allowed && !BUILT_IN_PLUGINS.has(id) && !allowed.includes(id)) {
+      issues.push({ severity: "warning", path, message: `"${id}" is not in the allowed list, so it can't start active.` });
+    }
+  });
+}
+
+function aiIssues(issues: Issue[], doc: DeploymentPolicy) {
+  const ai = doc.ai;
+  if (!ai) return;
+  if (ai.model && ai.enabled !== true) {
+    issues.push({
+      severity: "warning",
+      path: "/ai/model",
+      message: "The model has no effect while the assistant is disabled.",
+    });
+  }
+  if (ai.enabled === true && doc.capabilities && !doc.capabilities.includes("processing:run")) {
+    issues.push({
+      severity: "warning",
+      path: "/ai/enabled",
+      message: "The assistant is enabled but processing:run is not granted, which hides it in the app.",
+    });
+  }
+}
+
 /**
  * Check a document against the deployment JSON Schema only.
  *
@@ -112,6 +178,33 @@ export function validatePolicy(policy: unknown, operator?: OperatorSettings): Is
   if (issues.length) return issues;
   const doc = policy as DeploymentPolicy;
 
+  // The schema can't express "unique after trimming", but GeoLibre's parser
+  // drops the whole section when a list has such a duplicate.
+  const lists: [string, string[] | undefined][] = [
+    ["/interface/hiddenDataSources", doc.interface?.hiddenDataSources],
+    ["/interface/hiddenPlugins", doc.interface?.hiddenPlugins],
+    ["/interface/hiddenMenus", doc.interface?.hiddenMenus],
+    ["/interface/hiddenMenuItems", doc.interface?.hiddenMenuItems],
+    ["/plugins/allowed", doc.plugins?.allowed],
+    ["/plugins/blocked", doc.plugins?.blocked],
+    ["/plugins/defaultActive", doc.plugins?.defaultActive],
+    ["/sharing/embedOrigins", doc.sharing?.embedOrigins],
+  ];
+  for (const [path, list] of lists) {
+    const seenItems = new Set<string>();
+    list?.forEach((item, index) => {
+      const id = item.trim();
+      if (seenItems.has(id)) {
+        issues.push({
+          severity: "error",
+          path: `${path}/${index}`,
+          message: `Duplicate entry "${id}"; GeoLibre ignores the whole section when a list repeats an entry.`,
+        });
+      }
+      seenItems.add(id);
+    });
+  }
+
   const profile = doc.interface;
   if (profile) {
     unknownIds(issues, profile, "hiddenDataSources", catalog.dataSources, "data source");
@@ -126,6 +219,9 @@ export function validatePolicy(policy: unknown, operator?: OperatorSettings): Is
       });
     }
   }
+
+  pluginIssues(issues, doc);
+  aiIssues(issues, doc);
 
   const services = doc.services?.catalog ?? [];
   const seen = new Set<string>();
@@ -158,7 +254,7 @@ export function validatePolicy(policy: unknown, operator?: OperatorSettings): Is
   }
 
   const share = doc.sharing?.shareUrl?.trim();
-  if (share && share.toLowerCase() !== "off") {
+  if (share && share !== "off") {
     const problem = serviceUrlProblem(share, "https", "http");
     if (problem) issues.push({ severity: "error", path: "/sharing/shareUrl", message: `Share URL ${problem}.` });
   }
@@ -180,11 +276,10 @@ export function validatePolicy(policy: unknown, operator?: OperatorSettings): Is
   });
 
   const geolens = doc.geolens?.url?.trim();
-  if (geolens && !["off", "same-origin"].includes(geolens.toLowerCase())) {
-    const withScheme = /^[A-Za-z0-9.-]+(:\d+)?(\/.*)?$/.test(geolens) ? `https://${geolens}` : geolens;
-    const problem = /[?#]/.test(withScheme)
+  if (geolens && geolens !== "off" && geolens !== "same-origin") {
+    const problem = /[?#]/.test(geolens)
       ? "must not include query parameters or a fragment"
-      : serviceUrlProblem(withScheme, "https", "http");
+      : serviceUrlProblem(geolens, "https", "http");
     if (problem) issues.push({ severity: "error", path: "/geolens/url", message: `GeoLens URL ${problem}.` });
   }
 

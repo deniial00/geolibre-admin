@@ -2,9 +2,9 @@ import { Card, Checkbox, Field, Input, Notice, Select, TagInput } from "../compo
 import type { DeploymentPolicy, OperatorSettings } from "../policy/types";
 import type { Issue } from "../policy/validate";
 
-type SetPolicy = (update: (policy: DeploymentPolicy) => DeploymentPolicy) => void;
+export type SetPolicy = (update: (policy: DeploymentPolicy) => DeploymentPolicy) => void;
 
-function issueAt(issues: Issue[], path: string): string | undefined {
+export function issueAt(issues: Issue[], path: string): string | undefined {
   return issues.find((issue) => issue.severity === "error" && issue.path.startsWith(path))?.message;
 }
 
@@ -18,10 +18,10 @@ export function SharingSection({
   issues: Issue[];
 }) {
   const share = policy.sharing?.shareUrl ?? "";
-  const shareMode = share === "" ? "default" : share.toLowerCase() === "off" ? "off" : "custom";
+  const shareMode = share === "" ? "default" : share === "off" ? "off" : "custom";
   const geolens = policy.geolens?.url ?? "";
   const geolensMode =
-    geolens === "" ? "default" : ["off", "same-origin"].includes(geolens.toLowerCase()) ? geolens.toLowerCase() : "custom";
+    geolens === "" ? "default" : geolens === "off" || geolens === "same-origin" ? geolens : "custom";
 
   const setSharing = (patch: Partial<NonNullable<DeploymentPolicy["sharing"]>>) =>
     setPolicy((current) => ({ ...current, sharing: { ...current.sharing, ...patch } }));

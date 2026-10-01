@@ -9,12 +9,13 @@ It has two parts:
 
 - **Deployment policy.** An offline editor for what a deployment offers:
   capabilities, the interface profile (experience level, lock, hidden menus,
-  data sources and plugins), the organization service library, sharing and
-  embedding, GeoLens, branding, and the container's server settings. It
+  data sources and plugins), the plugin registry and allow/block lists, the
+  organization service library, sharing and embedding, GeoLens, the AI
+  assistant, branding, and the container's server settings. It
   validates with the same rules GeoLibre's container applies at startup and
   exports the files current GeoLibre releases read: `admin-profile.json`, a
   services file, a `.env` file, `docker run` commands and `compose.yaml`. It
-  also exports the whole policy as one `deployment.json` (draft schema, below).
+  also exports the whole policy as one `deployment.json` (GeoLibre's schema, below).
 - **Organizations and groups.** A console for any server implementing the
   [GeoLibre projects API](https://github.com/opengeos/GeoLibre/blob/main/docs/server-api.md),
   such as the reference server in `backend/geolibre_server_api`: create and
@@ -72,13 +73,15 @@ boundary: protect `/sidecar` and `/ai` on the server.
 
 ## `deployment.json`
 
-[`schema/deployment.schema.json`](schema/deployment.schema.json) is a draft
-JSON Schema for a single, versioned policy document, proposed in #2775 to
-replace GeoLibre's scattered static settings. GeoLibre doesn't read it yet; the
-editor imports and exports it so a policy can be kept in version control and
-regenerated. Every value in it is published to visitors, so it never holds
-secrets or infrastructure settings; those are exported as environment variables
-only.
+[`schema/deployment.schema.json`](schema/deployment.schema.json) is a synced
+copy of GeoLibre's canonical `schema/deployment.schema.json`, the JSON Schema
+for a single, versioned policy document; `schema/SOURCE.json` records the
+GeoLibre commit it came from. Current GeoLibre releases don't read the file yet
+(runtime loading is tracked in GeoLibre#2783); the editor imports and exports it
+so a policy can be kept in version control and regenerated. Every value in it is
+published to visitors, so it never holds secrets or infrastructure settings;
+those are exported as environment variables only. Hiding things in the client
+is not enforcement.
 
 ## Development
 
@@ -106,10 +109,14 @@ Generated files:
   hide and their complexity tiers. They live in GeoLibre's source, so regenerate
   from a checkout with `npm run sync:catalog -- ../GeoLibre`. A weekly workflow
   fails when it falls behind GeoLibre `main`.
-- `schema/deployment.schema.json` and `src/policy/schema-validator.generated.js`
-  come from `src/policy/schema.ts` via `npm run sync:schema`. The validator is
-  precompiled so the app needs no `eval` under a strict CSP; CI fails when
-  either is stale.
+- `schema/deployment.schema.json` is GeoLibre's own schema, copied (never edited
+  by hand) with `npm run sync:schema -- ../GeoLibre`, which also records the
+  GeoLibre commit in `schema/SOURCE.json` and regenerates
+  `src/policy/schema-validator.generated.js`. Run `npm run sync:schema` with no
+  argument to regenerate only the validator. The validator is precompiled so the
+  app needs no `eval` under a strict CSP; CI fails when it is stale, and the
+  weekly "GeoLibre contract drift" workflow fails when the schema or catalog
+  falls behind GeoLibre `main`.
 
 ## License
 
