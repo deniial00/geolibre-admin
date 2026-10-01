@@ -114,9 +114,13 @@ Contract tests run the API client against a live, disposable projects server.
 With Docker, use the compose server:
 
 ```bash
-docker compose up -d geolibre-server
+docker compose -p geolibre-admin-test up -d --wait geolibre-server
 GEOLIBRE_TEST_SERVER_URL=http://127.0.0.1:8000 npx vitest run tests/server.integration.test.ts
+docker compose -p geolibre-admin-test down -v
 ```
+
+The separate project name keeps the tests' accounts out of your regular stack's
+volume. Stop the regular stack first, since both use port 8000.
 
 Or install it with pip:
 

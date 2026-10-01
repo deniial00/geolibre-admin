@@ -1,13 +1,12 @@
 name: Publish image
 
 # Build and push the admin image to GHCR. The build is a fast static Vite
-# build, so every push to main publishes :latest.
+# build, so every push to main publishes :latest and every v* tag publishes
+# the semver tags.
 on:
   push:
     branches: [main]
     tags: ["v*"]
-  release:
-    types: [published]
   workflow_dispatch:
 
 permissions:
