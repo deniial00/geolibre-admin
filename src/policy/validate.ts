@@ -86,7 +86,7 @@ function pluginIssues(issues: Issue[], doc: DeploymentPolicy) {
   const plugins = doc.plugins;
   if (!plugins) return;
   const registry = plugins.registryUrl?.trim();
-  if (registry && /^[A-Za-z][A-Za-z0-9+.-]*:/.test(registry)) {
+  if (registry && /^([A-Za-z][A-Za-z0-9+.-]*:|\/\/)/.test(registry)) {
     const problem = serviceUrlProblem(registry, "https", "http");
     if (problem) {
       issues.push({ severity: "error", path: "/plugins/registryUrl", message: `Registry URL ${problem}.` });
@@ -119,7 +119,7 @@ function pluginIssues(issues: Issue[], doc: DeploymentPolicy) {
   });
   plugins.defaultActive?.forEach((id, index) => {
     const path = `/plugins/defaultActive/${index}`;
-    if (blocked.includes(id)) {
+    if (!BUILT_IN_PLUGINS.has(id) && blocked.includes(id)) {
       issues.push({ severity: "warning", path, message: `"${id}" is blocked, so it can't start active.` });
     } else if (allowed && !BUILT_IN_PLUGINS.has(id) && !allowed.includes(id)) {
       issues.push({ severity: "warning", path, message: `"${id}" is not in the allowed list, so it can't start active.` });

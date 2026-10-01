@@ -93,9 +93,16 @@ export function PluginsSection({
               onChange={(values) => setPlugins({ allowed: values })}
             />
           ) : null}
+          {allowMode === "only" && issueAt(issues, "/plugins/allowed") ? (
+            <p className="text-xs text-danger">{issueAt(issues, "/plugins/allowed")}</p>
+          ) : null}
         </fieldset>
 
-        <Field label="Blocked plugins" hint="Never loaded, even when also allowed.">
+        <Field
+          label="Blocked plugins"
+          hint="Never loaded, even when also allowed."
+          error={issueAt(issues, "/plugins/blocked")}
+        >
           {(id) => (
             <TagInput
               id={id}
@@ -131,7 +138,7 @@ export function PluginsSection({
               />
             ))}
           </div>
-          <Field label="External plugin ids">
+          <Field label="External plugin ids" error={issueAt(issues, "/plugins/defaultActive")}>
             {(id) => (
               <TagInput
                 id={id}

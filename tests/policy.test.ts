@@ -214,6 +214,11 @@ describe("semantic validation", () => {
       validatePolicy({ version: 1, plugins: { registryUrl: url } }).filter((i) => i.severity === "error");
     expect(errors("http://plugins.example.com/r.json").map((i) => i.path)).toEqual(["/plugins/registryUrl"]);
     expect(errors("/plugins/registry.json")).toEqual([]);
+    expect(errors("//evil.example.com/r.json").map((i) => i.path)).toEqual(["/plugins/registryUrl"]);
+    const builtIn = catalog.plugins[0].id;
+    expect(warned({ version: 1, plugins: { blocked: [builtIn], defaultActive: [builtIn] } })).toEqual([
+      "/plugins/blocked/0",
+    ]);
   });
 
   it("warns about ids missing from the catalog", () => {

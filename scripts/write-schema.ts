@@ -46,8 +46,8 @@ if (source) {
   ) {
     fail(`${file} has $id ${JSON.stringify(schema.$id)}, not GeoLibre's; refusing to sync.`);
   }
-  if (typeof schema.properties?.version?.const !== "number") {
-    fail(`${file} does not pin properties.version.const to a number.`);
+  if (schema.properties?.version?.const !== 1) {
+    fail(`${file} pins properties.version.const to ${JSON.stringify(schema.properties?.version?.const)}, but this app only writes version 1.`);
   }
   let commit = "unknown";
   try {
