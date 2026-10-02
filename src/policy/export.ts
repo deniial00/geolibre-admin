@@ -183,8 +183,9 @@ export const EXPORT_TARGETS: { value: ExportTarget; label: string; description: 
 ];
 
 /**
- * Settings the legacy files and variables cannot express, so a legacy export
- * silently drops them.
+ * Settings the legacy files and variables cannot express at all, so a legacy
+ * export drops them. (Capabilities and the welcome switch are not here: they
+ * travel as build arguments, see {@link buildArgs}.)
  *
  * @param policy - The deployment policy.
  * @returns Human-readable names of the policy sections that are lost.
@@ -194,7 +195,6 @@ export function legacyUnsupported(policy: DeploymentPolicy): string[] {
   const lost: string[] = [];
   if (cleaned.plugins) lost.push("Plugins (registry, allow and block lists, sideloading, default active)");
   if (cleaned.ai) lost.push("AI assistant (enabled, model)");
-  if (cleaned.capabilities) lost.push("Capabilities at runtime (only the build argument carries them)");
   return lost;
 }
 

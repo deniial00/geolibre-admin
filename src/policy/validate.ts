@@ -152,9 +152,12 @@ function aiIssues(issues: Issue[], doc: DeploymentPolicy) {
  * @param policy - The candidate document.
  * @returns One error per schema violation; empty when it conforms.
  */
-export function schemaIssues(policy: unknown): Issue[] {
+export function schemaIssues(
+  policy: unknown,
+  keep: (error: { keyword: string }) => boolean = () => true,
+): Issue[] {
   if (validateSchema(policy)) return [];
-  return (validateSchema.errors ?? []).map((error) => {
+  return (validateSchema.errors ?? []).filter(keep).map((error) => {
     const detail =
       error.keyword === "additionalProperties"
         ? `has unknown property "${(error.params as { additionalProperty: string }).additionalProperty}"`
@@ -163,6 +166,19 @@ export function schemaIssues(policy: unknown): Issue[] {
           : (error.message ?? "is invalid");
     return { severity: "error" as const, path: error.instancePath || "/", message: detail };
   });
+}
+
+/**
+ * Check a document against the schema, ignoring `pattern` violations.
+ * Used to decide whether a saved draft is structurally usable: a URL typed
+ * halfway fails its pattern but is still the right shape, whereas a wrong
+ * type or unknown key would crash the editor's sections.
+ *
+ * @param policy - The candidate document.
+ * @returns Errors other than pattern mismatches; empty when the shape is sound.
+ */
+export function structuralIssues(policy: unknown): Issue[] {
+  return schemaIssues(policy, (error) => error.keyword !== "pattern");
 }
 
 /**

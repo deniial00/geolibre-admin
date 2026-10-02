@@ -81,8 +81,9 @@ export function ExportSection({
         ) : null}
         {needsBuild ? (
           <Notice tone="warning">
-            This policy uses build-time settings, so it needs a custom image built from a GeoLibre checkout. The
-            other settings work with the published image.
+            This policy uses build-time settings (capabilities, the welcome wizard), which legacy GeoLibre reads only
+            as build arguments, so it needs a custom image built from a GeoLibre checkout. The other settings work
+            with the published image. The runtime deployment.json target reads them at startup instead.
           </Notice>
         ) : null}
         <div className="grid gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">

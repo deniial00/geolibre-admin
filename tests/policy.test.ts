@@ -32,7 +32,7 @@ import {
   type ServicesPolicy,
   type SharingPolicy,
 } from "../src/policy/types";
-import { embedOriginProblem, serviceUrlProblem, validatePolicy } from "../src/policy/validate";
+import { embedOriginProblem, serviceUrlProblem, structuralIssues, validatePolicy } from "../src/policy/validate";
 
 const operator = { ...DEFAULT_OPERATOR_SETTINGS };
 
@@ -328,7 +328,8 @@ describe("export", () => {
 
   it("names the settings the legacy target cannot express", () => {
     expect(legacyUnsupported(emptyPolicy())).toEqual([]);
-    expect(legacyUnsupported(full)).toHaveLength(3);
+    expect(legacyUnsupported(full)).toHaveLength(2);
+    expect(legacyUnsupported({ version: 1, capabilities: [] })).toEqual([]);
     expect(legacyUnsupported({ version: 1, ai: {}, plugins: { allowed: undefined } })).toEqual([]);
     expect(legacyUnsupported({ version: 1, ai: { enabled: false } })).toHaveLength(1);
   });
@@ -421,5 +422,14 @@ describe("import", () => {
     expect(() => importText('{"version":1,"interface":{"level":"expert"}}', emptyPolicy(), operator)).toThrow(/schema/);
     expect(() => importText('{"hello":"world"}', emptyPolicy(), operator)).toThrow(/Unrecognized/);
     expect(() => importText("just words", emptyPolicy(), operator)).toThrow(/KEY=VALUE/);
+  });
+});
+
+describe("structuralIssues", () => {
+  it("tolerates pattern mismatches but rejects wrong shapes", () => {
+    expect(structuralIssues({ version: 1, sharing: { shareUrl: "htt" } })).toEqual([]);
+    expect(structuralIssues({ version: 1, capabilities: "data:add" })).not.toEqual([]);
+    expect(structuralIssues({ version: 1, bogus: true })).not.toEqual([]);
+    expect(structuralIssues({ version: 2 })).not.toEqual([]);
   });
 });
