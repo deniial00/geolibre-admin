@@ -3,7 +3,7 @@
 A reference admin UI for self-hosted [GeoLibre](https://github.com/opengeos/GeoLibre)
 deployments. Like GeoLibre's reference projects server, it is a correctness
 baseline built against GeoLibre's published contracts, not a hardened product.
-Background: [opengeos/GeoLibre#2775](https://github.com/opengeos/GeoLibre/discussions/2775).
+Background: [opengeos/GeoLibre#2775](https://github.com/opengeos/GeoLibre/discussions/2775), whose `deployment.json` schema is now merged (#2785).
 
 It has two parts:
 
@@ -13,9 +13,12 @@ It has two parts:
   organization service library, sharing and embedding, GeoLens, the AI
   assistant, branding, and the container's server settings. It
   validates with the same rules GeoLibre's container applies at startup and
-  exports the files current GeoLibre releases read: `admin-profile.json`, a
-  services file, a `.env` file, `docker run` commands and `compose.yaml`. It
-  also exports the whole policy as one `deployment.json` (GeoLibre's schema, below).
+  exports for one of two targets: *Legacy GeoLibre (<= v3.2.0)* gives the files
+  released versions read (`admin-profile.json`, a services file, a `.env`
+  file, `docker run` commands, `compose.yaml`) and lists the settings it
+  can't express; *GeoLibre with runtime deployment.json* gives one
+  `deployment.json` (GeoLibre's schema, below), an operator-only `.env`, and
+  commands that mount the file.
 - **Organizations and groups.** A console for any server implementing the
   [GeoLibre projects API](https://github.com/opengeos/GeoLibre/blob/main/docs/server-api.md),
   such as the reference server in `backend/geolibre_server_api`: create and
@@ -83,20 +86,27 @@ production.
 | Sidecar, conversion roots, PostGIS hosts | `GEOLIBRE_*` env | Container start |
 | Capabilities, welcome wizard | `VITE_GEOLIBRE_CAPABILITIES`, `VITE_WELCOME_DISABLED` | **Build time** |
 
-Capabilities still require building your own image
-([GeoLibre#1673](https://github.com/opengeos/GeoLibre/issues/1673)); the export
-says so and includes the `docker build` command when the policy needs it.
-Capabilities and hidden items are client-side affordances, not a security
-boundary: protect `/sidecar` and `/ai` on the server.
+In releases up to v3.2.0, capabilities are build-time only
+([GeoLibre#1673](https://github.com/opengeos/GeoLibre/issues/1673)); the legacy
+export says so and includes the `docker build` command when the policy needs
+it. With a runtime `deployment.json` they are read at startup but fail open (a
+missing, blocked or late file leaves the full grant). Capabilities and hidden
+items are client-side affordances, not a security boundary: protect `/sidecar`
+and `/ai` on the server.
 
 ## `deployment.json`
 
 [`schema/deployment.schema.json`](schema/deployment.schema.json) is a synced
 copy of GeoLibre's canonical `schema/deployment.schema.json`, the JSON Schema
 for a single, versioned policy document; `schema/SOURCE.json` records the
-GeoLibre commit it came from. Current GeoLibre releases don't read the file yet
-(runtime loading is tracked in GeoLibre#2783); the editor imports and exports it
-so a policy can be kept in version control and regenerated. Every value in it is
+GeoLibre commit it came from. GeoLibre fetches `<base>/deployment.json` at startup
+(opengeos/GeoLibre#2795, on `main` but unreleased as of v3.2.0; see its
+[deployment policy docs](https://github.com/opengeos/GeoLibre/blob/main/docs/deployment-policy.md)).
+Generating the file from an environment variable (`GEOLIBRE_DEPLOYMENT_FILE`)
+isn't shipped, so the exported commands mount it at
+`/usr/share/nginx/html/deployment.json`. Today GeoLibre applies only
+`plugins.registryUrl` from the plugins section; the allow/block lists,
+sideloading and default-active ids are stored but not enforced. Every value in it is
 published to visitors, so it never holds secrets or infrastructure settings;
 those are exported as environment variables only. Hiding things in the client
 is not enforcement.

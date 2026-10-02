@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { schemaIssues } from "../policy/validate";
+import { structuralIssues } from "../policy/validate";
 import {
   DEFAULT_OPERATOR_SETTINGS,
   emptyPolicy,
@@ -19,10 +19,13 @@ function load(): Draft {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<Draft>;
-      // A draft saved by an older build may no longer match the schema.
-      if (parsed.policy && schemaIssues(parsed.policy).length === 0) {
+      // A draft saved mid-typing (say `https://`) fails the schema's URL
+      // patterns but must not be thrown away; the editor shows those as
+      // issues. Wrong types or unknown keys (an older build) are discarded.
+      const saved = parsed.policy;
+      if (saved && structuralIssues(saved).length === 0) {
         return {
-          policy: parsed.policy,
+          policy: saved,
           operator: { ...DEFAULT_OPERATOR_SETTINGS, ...parsed.operator },
         };
       }

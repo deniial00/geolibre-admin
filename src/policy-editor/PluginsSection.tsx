@@ -160,7 +160,8 @@ export function PluginsSection({
         <Notice tone="accent">
           A blocked id never loads, even if it is also allowed. With “Only these”, every other external
           plugin is blocked. To remove all install UI, withhold the plugins:install capability. This is
-          client-side hiding, not enforcement.
+          client-side hiding, not enforcement. GeoLibre currently applies only the registry URL at runtime; the
+          allow and block lists, sideloading and default-active ids are stored but not enforced yet.
         </Notice>
       </div>
     </Card>

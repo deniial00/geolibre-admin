@@ -69,9 +69,12 @@ export function CapabilitiesSection({
         </div>
         <Notice tone="warning">
           Capabilities remove menus and commands in the browser. They don't restrict the server: the
-          sidecar and AI proxy still answer requests, so pair them with the server settings. GeoLibre
-          reads them at <strong>build time</strong> only (<code>VITE_GEOLIBRE_CAPABILITIES</code>, see
-          opengeos/GeoLibre#1673), so a restricted set means building your own image.
+          sidecar and AI proxy still answer requests, so pair them with the server settings. In releases up
+          to v3.2.0 GeoLibre reads them at <strong>build time</strong> only (
+          <code>VITE_GEOLIBRE_CAPABILITIES</code>), so a restricted set means building your own image. With a
+          runtime <code>deployment.json</code> they are read when the app starts, but they fail open: a file
+          that is missing, blocked or slower than 3 seconds leaves the session with the full grant, so this
+          is not enforcement (see GeoLibre's docs/deployment-policy.md).
         </Notice>
       </div>
     </Card>
