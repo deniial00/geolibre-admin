@@ -2,9 +2,11 @@ import { useMemo, useRef, useState } from "react";
 import { Button, ConfirmButton, Notice, Textarea, cx } from "../components/ui";
 import { importText } from "../policy/import";
 import { validatePolicy, type Issue } from "../policy/validate";
+import { AiSection } from "./AiSection";
 import { CapabilitiesSection } from "./CapabilitiesSection";
 import { ExportSection } from "./ExportSection";
 import { InterfaceSection } from "./InterfaceSection";
+import { PluginsSection } from "./PluginsSection";
 import { ServicesSection } from "./ServicesSection";
 import { BrandingSection, OperatorSection, SharingSection } from "./SharingSection";
 import { usePolicyDraft } from "./usePolicyDraft";
@@ -12,8 +14,10 @@ import { usePolicyDraft } from "./usePolicyDraft";
 const SECTIONS = [
   { id: "capabilities", label: "Capabilities", prefix: "/capabilities" },
   { id: "interface", label: "Interface", prefix: "/interface" },
+  { id: "plugins", label: "Plugins", prefix: "/plugins" },
   { id: "services", label: "Service library", prefix: "/services" },
   { id: "sharing", label: "Sharing", prefix: "/sharing|/geolens" },
+  { id: "ai", label: "AI assistant", prefix: "/ai" },
   { id: "branding", label: "Branding", prefix: "/branding" },
   { id: "server", label: "Server settings", prefix: "operator/" },
   { id: "export", label: "Review and export", prefix: "" },
@@ -153,11 +157,17 @@ export function PolicyEditor() {
         <div id="policy-interface" className="scroll-mt-20">
           <InterfaceSection policy={policy} setPolicy={setPolicy} />
         </div>
+        <div id="policy-plugins" className="scroll-mt-20">
+          <PluginsSection policy={policy} setPolicy={setPolicy} issues={issues} />
+        </div>
         <div id="policy-services" className="scroll-mt-20">
           <ServicesSection policy={policy} setPolicy={setPolicy} />
         </div>
         <div id="policy-sharing" className="scroll-mt-20">
           <SharingSection policy={policy} setPolicy={setPolicy} issues={issues} />
+        </div>
+        <div id="policy-ai" className="scroll-mt-20">
+          <AiSection policy={policy} setPolicy={setPolicy} issues={issues} />
         </div>
         <div id="policy-branding" className="scroll-mt-20">
           <BrandingSection policy={policy} setPolicy={setPolicy} />

@@ -13,8 +13,23 @@ import {
   toServicesFile,
 } from "../src/policy/export";
 import { importText, parseEnv } from "../src/policy/import";
-import { deploymentSchema } from "../src/policy/schema";
-import { DEFAULT_OPERATOR_SETTINGS, emptyPolicy, type DeploymentPolicy } from "../src/policy/types";
+import {
+  CAPABILITIES,
+  DEFAULT_OPERATOR_SETTINGS,
+  EXPERIENCE_LEVELS,
+  SCHEMA_URL,
+  SERVICE_KINDS,
+  emptyPolicy,
+  type AiPolicy,
+  type BrandingPolicy,
+  type DeploymentPolicy,
+  type GeoLensPolicy,
+  type InterfacePolicy,
+  type PluginsPolicy,
+  type ServiceEntry,
+  type ServicesPolicy,
+  type SharingPolicy,
+} from "../src/policy/types";
 import { embedOriginProblem, serviceUrlProblem, validatePolicy } from "../src/policy/validate";
 
 const operator = { ...DEFAULT_OPERATOR_SETTINGS };
@@ -42,12 +57,81 @@ const full: DeploymentPolicy = {
   },
   geolens: { url: "same-origin" },
   branding: { appName: "Acme Maps", welcome: false },
+  plugins: {
+    registryUrl: "/plugins/registry.json",
+    allowed: ["acme-tools"],
+    blocked: ["bad-plugin"],
+    sideload: false,
+    defaultActive: ["acme-tools"],
+  },
+  ai: { enabled: true, model: "openai/gpt-5.6-luna" },
 };
 
+type Keys<T> = { [K in keyof Required<T>]: true };
+const topKeys: Keys<DeploymentPolicy> = {
+  $schema: true,
+  version: true,
+  capabilities: true,
+  interface: true,
+  plugins: true,
+  services: true,
+  sharing: true,
+  geolens: true,
+  ai: true,
+  branding: true,
+};
+const interfaceKeys: Keys<InterfacePolicy> = {
+  enabled: true,
+  level: true,
+  lock: true,
+  hiddenDataSources: true,
+  hiddenPlugins: true,
+  hiddenMenus: true,
+  hiddenMenuItems: true,
+};
+const pluginsKeys: Keys<PluginsPolicy> = {
+  registryUrl: true,
+  allowed: true,
+  blocked: true,
+  sideload: true,
+  defaultActive: true,
+};
+const servicesKeys: Keys<ServicesPolicy> = { builtins: true, catalog: true };
+const serviceEntryKeys: Keys<ServiceEntry> = {
+  id: true,
+  name: true,
+  kind: true,
+  category: true,
+  fields: true,
+};
+const sharingKeys: Keys<SharingPolicy> = { shareUrl: true, collabUrl: true, embedOrigins: true };
+const geolensKeys: Keys<GeoLensPolicy> = { url: true };
+const aiKeys: Keys<AiPolicy> = { enabled: true, model: true };
+const brandingKeys: Keys<BrandingPolicy> = { appName: true, welcome: true };
+
 describe("schema", () => {
-  it("matches the committed schema file", () => {
-    const committed = JSON.parse(readFileSync(resolve(__dirname, "../schema/deployment.schema.json"), "utf8"));
-    expect(committed).toEqual(JSON.parse(JSON.stringify(deploymentSchema)));
+  it("covers every schema key with a typed field", () => {
+    const schema = JSON.parse(readFileSync(resolve(__dirname, "../schema/deployment.schema.json"), "utf8"));
+    const keys = (map: object) => Object.keys(map).sort();
+    const props = schema.properties;
+    const typed: [string, object, object][] = [
+      ["document", schema.properties, topKeys],
+      ["interface", props.interface.properties, interfaceKeys],
+      ["plugins", props.plugins.properties, pluginsKeys],
+      ["services", props.services.properties, servicesKeys],
+      ["service entry", props.services.properties.catalog.items.properties, serviceEntryKeys],
+      ["sharing", props.sharing.properties, sharingKeys],
+      ["geolens", props.geolens.properties, geolensKeys],
+      ["ai", props.ai.properties, aiKeys],
+      ["branding", props.branding.properties, brandingKeys],
+    ];
+    for (const [name, fromSchema, fromTypes] of typed) {
+      expect({ name, keys: keys(fromSchema) }).toEqual({ name, keys: keys(fromTypes) });
+    }
+    expect(props.capabilities.items.enum).toEqual([...CAPABILITIES]);
+    expect(props.interface.properties.level.enum).toEqual([...EXPERIENCE_LEVELS]);
+    expect(props.services.properties.catalog.items.properties.kind.enum).toEqual([...SERVICE_KINDS]);
+    expect(schema.$id).toBe(SCHEMA_URL);
   });
 
   it("accepts an empty and a full policy", () => {
@@ -98,9 +182,43 @@ describe("semantic validation", () => {
     expect(errors.map((issue) => issue.path)).toEqual(["/services/catalog/1/id", "/sharing/shareUrl"]);
   });
 
-  it("accepts share URL off and GeoLens host shorthand", () => {
-    const policy: DeploymentPolicy = { version: 1, sharing: { shareUrl: "OFF" }, geolens: { url: "geolens.example.org" } };
-    expect(validatePolicy(policy)).toEqual([]);
+  it("rejects values GeoLibre's parser drops", () => {
+    const paths = (policy: DeploymentPolicy) => validatePolicy(policy).map((issue) => issue.path);
+    expect(paths({ version: 1, sharing: { shareUrl: "OFF" } })).toContain("/sharing/shareUrl");
+    expect(paths({ version: 1, geolens: { url: "geolens.example.org" } })).toContain("/geolens/url");
+    expect(validatePolicy({ version: 1, sharing: { shareUrl: "off" }, geolens: { url: "same-origin" } })).toEqual([]);
+  });
+
+  it("flags list entries that repeat after trimming", () => {
+    const errors = validatePolicy({ version: 1, plugins: { allowed: ["a", " a"] } }).filter(
+      (issue) => issue.severity === "error",
+    );
+    expect(errors.map((issue) => issue.path)).toEqual(["/plugins/allowed/1"]);
+  });
+
+  it("warns about plugin precedence and AI settings", () => {
+    const warned = (policy: DeploymentPolicy) =>
+      validatePolicy(policy).filter((i) => i.severity === "warning").map((i) => i.path);
+    expect(
+      warned({
+        version: 1,
+        capabilities: ["data:add"],
+        plugins: { allowed: ["x"], blocked: ["x"], defaultActive: ["x", "y"] },
+      }),
+    ).toEqual(["/plugins/blocked/0", "/plugins/defaultActive/0", "/plugins/defaultActive/1"]);
+    expect(warned({ version: 1, plugins: { allowed: [catalog.plugins[0].id] } })).toEqual(["/plugins/allowed/0"]);
+    expect(warned({ version: 1, plugins: { allowed: [] } })).toEqual(["/plugins/allowed"]);
+    expect(warned({ version: 1, ai: { model: "m" } })).toEqual(["/ai/model"]);
+    expect(warned({ version: 1, capabilities: ["data:add"], ai: { enabled: true } })).toEqual(["/ai/enabled"]);
+    const errors = (url: string) =>
+      validatePolicy({ version: 1, plugins: { registryUrl: url } }).filter((i) => i.severity === "error");
+    expect(errors("http://plugins.example.com/r.json").map((i) => i.path)).toEqual(["/plugins/registryUrl"]);
+    expect(errors("/plugins/registry.json")).toEqual([]);
+    expect(errors("//evil.example.com/r.json").map((i) => i.path)).toEqual(["/plugins/registryUrl"]);
+    const builtIn = catalog.plugins[0].id;
+    expect(warned({ version: 1, plugins: { blocked: [builtIn], defaultActive: [builtIn] } })).toEqual([
+      "/plugins/blocked/0",
+    ]);
   });
 
   it("warns about ids missing from the catalog", () => {
@@ -134,6 +252,13 @@ describe("export", () => {
     expect(cleanPolicy({ version: 1, sharing: {}, branding: { appName: "" }, capabilities: [] })).toEqual({
       version: 1,
       capabilities: [],
+    });
+  });
+
+  it("keeps an empty allowed list but drops empty blocked", () => {
+    expect(cleanPolicy({ version: 1, plugins: { allowed: [], blocked: undefined } })).toEqual({
+      version: 1,
+      plugins: { allowed: [] },
     });
   });
 
@@ -228,6 +353,34 @@ describe("import", () => {
     expect(result.policy.capabilities).toEqual(["data:add"]);
     expect(result.policy.branding?.appName).toBe("Acme Maps");
     expect(result.operator.sidecar).toBe(false);
+  });
+
+  it("normalizes legacy env spellings", () => {
+    const legacy = importText(
+      "GEOLIBRE_SHARE_URL=OFF\nGEOLIBRE_GEOLENS_URL=geolens.example.org",
+      emptyPolicy(),
+      operator,
+    );
+    expect(legacy.policy.sharing?.shareUrl).toBe("off");
+    expect(legacy.policy.geolens?.url).toBe("https://geolens.example.org");
+    const keyword = importText("GEOLIBRE_GEOLENS_URL=Same-Origin", emptyPolicy(), operator);
+    expect(keyword.policy.geolens?.url).toBe("same-origin");
+  });
+
+  it("maps AI and registry env without secrets", () => {
+    const text = [
+      "VITE_GEOLIBRE_PLUGIN_REGISTRY_URL=https://plugins.example.com/r.json",
+      "GEOLIBRE_AI_URL=/ai",
+      "GEOLIBRE_AI_MODEL=openai/gpt-5.6-luna",
+      "GEOLIBRE_AI_PROXY_URL=https://ai.example.com",
+      "GEOLIBRE_AI_PROXY_TOKEN=s3cret-token",
+    ].join("\n");
+    const result = importText(text, emptyPolicy(), operator);
+    expect(result.policy.ai).toEqual({ enabled: true, model: "openai/gpt-5.6-luna" });
+    expect(result.policy.plugins?.registryUrl).toBe("https://plugins.example.com/r.json");
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("s3cret-token");
+    expect(serialized).not.toContain("ai.example.com");
   });
 
   it("rejects documents that fail the schema or aren't recognized", () => {

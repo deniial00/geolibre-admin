@@ -1,8 +1,9 @@
-name: Catalog drift
+name: GeoLibre contract drift
 
 # GeoLibre's hideable ids (data sources, menus, menu items, built-in plugins)
-# live in its source tree. Fail when the committed catalog falls behind, so
-# someone runs `npm run sync:catalog` and reviews the change.
+# live in its source tree, and the deployment.json schema in its `schema/`
+# directory. Fail when either committed copy falls behind, so someone runs
+# `npm run sync:catalog` / `npm run sync:schema` and reviews the change.
 on:
   schedule:
     - cron: "0 6 * * 1"
@@ -23,13 +24,15 @@ jobs:
           sparse-checkout: |
             apps/geolibre-desktop/src
             packages/plugins/src
+            schema
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run sync:catalog -- GeoLibre
-      - name: Compare ids (ignoring the source commit)
+      - run: npm run sync:schema -- GeoLibre
+      - name: Compare catalog and schema (ignoring the source commit)
         run: |
-          git diff --stat -- src/catalog
-          git diff -U0 -- src/catalog | grep -E '^[+-] ' | grep -v '"commit"' && exit 1 || echo "Catalog is current."
+          git diff --stat -- src/catalog schema
+          git diff -U0 -- src/catalog schema ':(exclude)schema/SOURCE.json' | grep -E '^[+-] ' | grep -v '"commit"' && exit 1 || echo "Catalog and schema are current."
