@@ -8,6 +8,8 @@ import {
   exportFiles,
   runtimeEnv,
   toAdminProfile,
+  legacyUnsupported,
+  operatorEnv,
   toCompose,
   toDockerCommands,
   toServicesFile,
@@ -215,6 +217,8 @@ describe("semantic validation", () => {
     expect(errors("http://plugins.example.com/r.json").map((i) => i.path)).toEqual(["/plugins/registryUrl"]);
     expect(errors("/plugins/registry.json")).toEqual([]);
     expect(errors("//evil.example.com/r.json").map((i) => i.path)).toEqual(["/plugins/registryUrl"]);
+    expect(errors("https://user:pw@plugins.example.com/r.json").map((i) => i.path)).toEqual(["/plugins/registryUrl"]);
+    expect(errors("https://plugins.example.com/r.json")).toEqual([]);
     const builtIn = catalog.plugins[0].id;
     expect(warned({ version: 1, plugins: { blocked: [builtIn], defaultActive: [builtIn] } })).toEqual([
       "/plugins/blocked/0",
@@ -301,27 +305,57 @@ describe("export", () => {
 
   it("uses the published image when no build args are needed", () => {
     const policy: DeploymentPolicy = { version: 1, branding: { appName: "Acme Maps" } };
-    expect(toDockerCommands(policy, operator)).not.toContain("docker build");
-    expect(toDockerCommands(policy, operator)).toContain("-e GEOLIBRE_APP_NAME='Acme Maps'");
-    expect(toCompose(policy, operator)).toContain("image: ghcr.io/opengeos/geolibre:latest");
-    expect(toDockerCommands(full, operator)).toContain("--build-arg VITE_GEOLIBRE_CAPABILITIES=data:add,export:data");
-    expect(toCompose(full, operator)).toContain("./admin-profile.json:/usr/share/nginx/html/admin-profile.json:ro");
+    expect(toDockerCommands(policy, operator, "legacy")).not.toContain("docker build");
+    expect(toDockerCommands(policy, operator, "legacy")).toContain("-e GEOLIBRE_APP_NAME='Acme Maps'");
+    expect(toCompose(policy, operator, "legacy")).toContain("image: ghcr.io/opengeos/geolibre:latest");
+    expect(toDockerCommands(full, operator, "legacy")).toContain(
+      "--build-arg VITE_GEOLIBRE_CAPABILITIES=data:add,export:data",
+    );
+    expect(toCompose(full, operator, "legacy")).toContain(
+      "./admin-profile.json:/usr/share/nginx/html/admin-profile.json:ro",
+    );
   });
 
-  it("lists only the files a policy needs", () => {
-    expect(exportFiles(emptyPolicy(), operator).map((file) => file.name)).toEqual([
-      "deployment.json",
+  it("lists only the files a legacy policy needs and omits deployment.json", () => {
+    expect(exportFiles(emptyPolicy(), operator, "legacy").map((file) => file.name)).toEqual([
       "geolibre.env",
       "docker-run.sh",
       "compose.yaml",
     ]);
-    expect(exportFiles(full, operator).map((file) => file.name)).toContain("geolibre-services.json");
+    const names = exportFiles(full, operator, "legacy").map((file) => file.name);
+    expect(names).toEqual(["admin-profile.json", "geolibre-services.json", "geolibre.env", "docker-run.sh", "compose.yaml"]);
+  });
+
+  it("names the settings the legacy target cannot express", () => {
+    expect(legacyUnsupported(emptyPolicy())).toEqual([]);
+    expect(legacyUnsupported(full)).toHaveLength(3);
+    expect(legacyUnsupported({ version: 1, ai: {}, plugins: { allowed: undefined } })).toEqual([]);
+    expect(legacyUnsupported({ version: 1, ai: { enabled: false } })).toHaveLength(1);
+  });
+
+  it("emits deployment.json with a slim env and mounts it for the runtime target", () => {
+    const op = { sidecar: true, conversionRoots: "/data", postgisHosts: "db.internal" };
+    const files = exportFiles(full, op, "deployment");
+    expect(files.map((file) => file.name)).toEqual(["deployment.json", "geolibre.env", "docker-run.sh", "compose.yaml"]);
+    const byName = Object.fromEntries(files.map((file) => [file.name, file.content]));
+    expect(JSON.parse(byName["deployment.json"])).toEqual(cleanPolicy(full));
+    expect(byName["geolibre.env"]).toContain("GEOLIBRE_CONVERSION_ROOTS=/data");
+    expect(byName["geolibre.env"]).toContain("GEOLIBRE_POSTGIS_HOSTS=db.internal");
+    expect(byName["geolibre.env"]).not.toMatch(/SHARE_URL|APP_NAME|SERVICES_FILE|BUILTIN/);
+    expect(byName["docker-run.sh"]).not.toContain("docker build");
+    expect(byName["docker-run.sh"]).not.toContain("--build-arg");
+    expect(byName["docker-run.sh"]).toContain('-v "$PWD/deployment.json:/usr/share/nginx/html/deployment.json:ro"');
+    expect(byName["docker-run.sh"]).not.toContain("admin-profile");
+    expect(byName["compose.yaml"]).toContain("./deployment.json:/usr/share/nginx/html/deployment.json:ro");
+    expect(byName["compose.yaml"]).toContain("image: ghcr.io/opengeos/geolibre:latest");
+    expect(byName["compose.yaml"]).not.toContain("build:");
+    expect(operatorEnv({ ...op, sidecar: false })).toEqual([{ name: "GEOLIBRE_DISABLE_SIDECAR", value: "1" }]);
   });
 });
 
 describe("import", () => {
   it("round-trips a deployment.json", () => {
-    const text = exportFiles(full, operator)[0].content;
+    const text = exportFiles(full, operator, "deployment")[0].content;
     const result = importText(text, emptyPolicy(), operator);
     expect(result.kind).toBe("deployment.json");
     expect(result.policy).toEqual(cleanPolicy(full));

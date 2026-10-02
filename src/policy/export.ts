@@ -8,6 +8,8 @@ import type {
 /** Where the generated files are mounted in the GeoLibre container. */
 export const ADMIN_PROFILE_MOUNT = "/usr/share/nginx/html/admin-profile.json";
 export const SERVICES_MOUNT = "/config/geolibre-services.json";
+/** GeoLibre fetches `<base>/deployment.json`; GEOLIBRE_DEPLOYMENT_FILE generation is not shipped, so mount it directly. */
+export const DEPLOYMENT_MOUNT = "/usr/share/nginx/html/deployment.json";
 
 function isEmpty(value: unknown): boolean {
   if (value === undefined || value === null || value === "") return true;
@@ -79,6 +81,26 @@ export interface Setting {
 }
 
 /**
+ * The container variables that are operator settings, not policy: they stay
+ * environment-only whichever export target is chosen.
+ *
+ * @param operator - Env-only server settings.
+ * @returns Sidecar, conversion-root and PostGIS variables.
+ */
+export function operatorEnv(operator: OperatorSettings): Setting[] {
+  const env: Setting[] = [];
+  const add = (name: string, value: string) => {
+    if (value.trim() !== "") env.push({ name, value: value.trim() });
+  };
+  if (!operator.sidecar) add("GEOLIBRE_DISABLE_SIDECAR", "1");
+  else {
+    add("GEOLIBRE_CONVERSION_ROOTS", operator.conversionRoots);
+    add("GEOLIBRE_POSTGIS_HOSTS", operator.postgisHosts);
+  }
+  return env;
+}
+
+/**
  * Container environment variables for `docker run -e` / Compose.
  *
  * @param policy - The deployment policy.
@@ -97,11 +119,7 @@ export function runtimeEnv(policy: DeploymentPolicy, operator: OperatorSettings)
   add("GEOLIBRE_APP_NAME", policy.branding?.appName);
   if (toServicesFile(policy)) add("GEOLIBRE_SERVICES_FILE", SERVICES_MOUNT, "mount geolibre-services.json here");
   if (policy.services?.builtins === false) add("GEOLIBRE_BUILTIN_SERVICES", "off");
-  if (!operator.sidecar) add("GEOLIBRE_DISABLE_SIDECAR", "1");
-  if (operator.sidecar) {
-    add("GEOLIBRE_CONVERSION_ROOTS", operator.conversionRoots);
-    add("GEOLIBRE_POSTGIS_HOSTS", operator.postgisHosts);
-  }
+  env.push(...operatorEnv(operator));
   return env;
 }
 
@@ -146,16 +164,75 @@ export function toEnvFile(env: Setting[]): string {
   return `${lines.join("\n")}\n`;
 }
 
+/** Which GeoLibre generation the exported files are for. */
+export type ExportTarget = "legacy" | "deployment";
+
+export const EXPORT_TARGETS: { value: ExportTarget; label: string; description: string }[] = [
+  {
+    value: "legacy",
+    label: "Legacy GeoLibre (<= v3.2.0)",
+    description:
+      "The files released versions read today: admin-profile.json, a services file and environment variables. Capabilities need a custom build.",
+  },
+  {
+    value: "deployment",
+    label: "GeoLibre with runtime deployment.json",
+    description:
+      "One deployment.json mounted into the app root, plus operator-only environment variables. Needs a GeoLibre build that includes opengeos/GeoLibre#2795 (on main, unreleased as of v3.2.0).",
+  },
+];
+
+/**
+ * Settings the legacy files and variables cannot express, so a legacy export
+ * silently drops them.
+ *
+ * @param policy - The deployment policy.
+ * @returns Human-readable names of the policy sections that are lost.
+ */
+export function legacyUnsupported(policy: DeploymentPolicy): string[] {
+  const cleaned = cleanPolicy(policy);
+  const lost: string[] = [];
+  if (cleaned.plugins) lost.push("Plugins (registry, allow and block lists, sideloading, default active)");
+  if (cleaned.ai) lost.push("AI assistant (enabled, model)");
+  if (cleaned.capabilities) lost.push("Capabilities at runtime (only the build argument carries them)");
+  return lost;
+}
+
+interface Mount {
+  file: string;
+  target: string;
+}
+
+interface Plan {
+  args: Setting[];
+  env: Setting[];
+  mounts: Mount[];
+}
+
+function plan(policy: DeploymentPolicy, operator: OperatorSettings, target: ExportTarget): Plan {
+  if (target === "deployment") {
+    return { args: [], env: operatorEnv(operator), mounts: [{ file: "deployment.json", target: DEPLOYMENT_MOUNT }] };
+  }
+  const mounts: Mount[] = [];
+  if (toAdminProfile(policy)) mounts.push({ file: "admin-profile.json", target: ADMIN_PROFILE_MOUNT });
+  if (toServicesFile(policy)) mounts.push({ file: "geolibre-services.json", target: SERVICES_MOUNT });
+  return { args: buildArgs(policy), env: runtimeEnv(policy, operator), mounts };
+}
+
 /**
  * Shell commands that build (when needed) and run the configured image.
  *
  * @param policy - The deployment policy.
  * @param operator - Env-only server settings.
+ * @param target - Which GeoLibre generation to target.
  * @returns A copy-pasteable shell snippet.
  */
-export function toDockerCommands(policy: DeploymentPolicy, operator: OperatorSettings): string {
-  const args = buildArgs(policy);
-  const env = runtimeEnv(policy, operator);
+export function toDockerCommands(
+  policy: DeploymentPolicy,
+  operator: OperatorSettings,
+  target: ExportTarget,
+): string {
+  const { args, env, mounts } = plan(policy, operator, target);
   const image = args.length ? "geolibre-custom" : "ghcr.io/opengeos/geolibre:latest";
   const blocks: string[] = [];
   if (args.length) {
@@ -166,8 +243,7 @@ export function toDockerCommands(policy: DeploymentPolicy, operator: OperatorSet
   }
   const run = ["docker run -d --name geolibre -p 8080:80 \\"];
   for (const item of env) run.push(`  -e ${item.name}=${shellQuote(item.value)} \\`);
-  if (toAdminProfile(policy)) run.push(`  -v "$PWD/admin-profile.json:${ADMIN_PROFILE_MOUNT}:ro" \\`);
-  if (toServicesFile(policy)) run.push(`  -v "$PWD/geolibre-services.json:${SERVICES_MOUNT}:ro" \\`);
+  for (const mount of mounts) run.push(`  -v "$PWD/${mount.file}:${mount.target}:ro" \\`);
   run.push(`  ${image}`);
   blocks.push(run.join("\n"));
   return `${blocks.join("\n\n")}\n`;
@@ -178,11 +254,11 @@ export function toDockerCommands(policy: DeploymentPolicy, operator: OperatorSet
  *
  * @param policy - The deployment policy.
  * @param operator - Env-only server settings.
+ * @param target - Which GeoLibre generation to target.
  * @returns A `compose.yaml` document.
  */
-export function toCompose(policy: DeploymentPolicy, operator: OperatorSettings): string {
-  const args = buildArgs(policy);
-  const env = runtimeEnv(policy, operator);
+export function toCompose(policy: DeploymentPolicy, operator: OperatorSettings, target: ExportTarget): string {
+  const { args, env, mounts } = plan(policy, operator, target);
   const lines = ["services:", "  geolibre:"];
   if (args.length) {
     lines.push("    build:", "      context: ./GeoLibre  # a GeoLibre checkout", "      args:");
@@ -195,10 +271,10 @@ export function toCompose(policy: DeploymentPolicy, operator: OperatorSettings):
     lines.push("    environment:");
     for (const item of env) lines.push(`      ${item.name}: ${yamlQuote(item.value)}`);
   }
-  const volumes: string[] = [];
-  if (toAdminProfile(policy)) volumes.push(`      - ./admin-profile.json:${ADMIN_PROFILE_MOUNT}:ro`);
-  if (toServicesFile(policy)) volumes.push(`      - ./geolibre-services.json:${SERVICES_MOUNT}:ro`);
-  if (volumes.length) lines.push("    volumes:", ...volumes);
+  if (mounts.length) {
+    lines.push("    volumes:");
+    for (const mount of mounts) lines.push(`      - ./${mount.file}:${mount.target}:ro`);
+  }
   return `${lines.join("\n")}\n`;
 }
 
@@ -213,47 +289,61 @@ export interface ExportFile {
  *
  * @param policy - The deployment policy.
  * @param operator - Env-only server settings.
+ * @param target - Which GeoLibre generation to target.
  * @returns Files in display order; optional ones are omitted when unused.
  */
-export function exportFiles(policy: DeploymentPolicy, operator: OperatorSettings): ExportFile[] {
-  const files: ExportFile[] = [
-    {
+export function exportFiles(
+  policy: DeploymentPolicy,
+  operator: OperatorSettings,
+  target: ExportTarget,
+): ExportFile[] {
+  const files: ExportFile[] = [];
+  const { env } = plan(policy, operator, target);
+  if (target === "deployment") {
+    files.push({
       name: "deployment.json",
-      description: "The whole policy as one versioned document (draft schema).",
+      description: `The whole policy: mount it at ${DEPLOYMENT_MOUNT} (GeoLibre fetches it from the app root at startup).`,
       content: `${JSON.stringify(cleanPolicy(policy), null, 2)}\n`,
-    },
-  ];
-  const profile = toAdminProfile(policy);
-  if (profile) {
-    files.push({
-      name: "admin-profile.json",
-      description: "Interface profile: serve it from the app root (web) or the app config directory (desktop).",
-      content: `${JSON.stringify(profile, null, 2)}\n`,
     });
-  }
-  const services = toServicesFile(policy);
-  if (services) {
-    files.push({
-      name: "geolibre-services.json",
-      description: `Curated service library: mount it and point GEOLIBRE_SERVICES_FILE at it.`,
-      content: `${JSON.stringify(services, null, 2)}\n`,
-    });
+  } else {
+    const profile = toAdminProfile(policy);
+    if (profile) {
+      files.push({
+        name: "admin-profile.json",
+        description: "Interface profile: serve it from the app root (web) or the app config directory (desktop).",
+        content: `${JSON.stringify(profile, null, 2)}\n`,
+      });
+    }
+    const services = toServicesFile(policy);
+    if (services) {
+      files.push({
+        name: "geolibre-services.json",
+        description: `Curated service library: mount it and point GEOLIBRE_SERVICES_FILE at it.`,
+        content: `${JSON.stringify(services, null, 2)}\n`,
+      });
+    }
   }
   files.push(
     {
       name: "geolibre.env",
-      description: "Runtime environment for docker run --env-file or Compose.",
-      content: toEnvFile(runtimeEnv(policy, operator)),
+      description:
+        target === "deployment"
+          ? "Operator-only environment (sidecar, conversion roots, PostGIS hosts) for docker run --env-file or Compose."
+          : "Runtime environment for docker run --env-file or Compose.",
+      content: toEnvFile(env),
     },
     {
       name: "docker-run.sh",
-      description: "Build (only when build-time settings are used) and run commands.",
-      content: toDockerCommands(policy, operator),
+      description:
+        target === "deployment"
+          ? "Run command that mounts deployment.json."
+          : "Build (only when build-time settings are used) and run commands.",
+      content: toDockerCommands(policy, operator, target),
     },
     {
       name: "compose.yaml",
       description: "A Docker Compose service using the files above.",
-      content: toCompose(policy, operator),
+      content: toCompose(policy, operator, target),
     },
   );
   return files;
