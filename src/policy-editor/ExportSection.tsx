@@ -4,16 +4,34 @@ import { EXPORT_TARGETS, buildArgs, exportFiles, legacyUnsupported, type ExportT
 import type { DeploymentPolicy, OperatorSettings } from "../policy/types";
 import type { Issue } from "../policy/validate";
 
+const targetDescriptions: Record<ExportTarget, string> = {
+  legacy:
+    "Legacy files for GeoLibre through v3.2.0. Capabilities and welcome settings require build arguments.",
+  deployment:
+    "Runtime policy for builds containing Parts 1–6: main-line images are published, but the latest tagged release is v3.2.0. Mount a separate policy input and set GEOLIBRE_DEPLOYMENT_FILE.",
+};
+
+const fileDescriptions: Record<string, string> = {
+  "deployment.json": "Public policy input; mount separately and set GEOLIBRE_DEPLOYMENT_FILE.",
+  "docker-run.sh":
+    "Not deployment-ready: mounts the generated public output and omits GEOLIBRE_DEPLOYMENT_FILE. Do not use until the exporter is corrected.",
+  "compose.yaml":
+    "Not deployment-ready: mounts the generated public output and omits GEOLIBRE_DEPLOYMENT_FILE. Do not use until the exporter is corrected.",
+};
+
 export function ExportSection({
   policy,
   operator,
+  target,
+  setTarget,
   issues,
 }: {
   policy: DeploymentPolicy;
   operator: OperatorSettings;
+  target: ExportTarget;
+  setTarget: (target: ExportTarget) => void;
   issues: Issue[];
 }) {
-  const [target, setTarget] = useState<ExportTarget>("legacy");
   const files = exportFiles(policy, operator, target);
   const [selected, setSelected] = useState("");
   const file = files.find((item) => item.name === selected) ?? files[0];
@@ -60,7 +78,7 @@ export function ExportSection({
                   />
                   {option.label}
                 </span>
-                <span className="text-xs text-muted">{option.description}</span>
+                <span className="text-xs text-muted">{targetDescriptions[option.value]}</span>
               </label>
             ))}
           </div>
@@ -73,7 +91,7 @@ export function ExportSection({
                 <li key={item}>{item}</li>
               ))}
             </ul>
-            Switch to the runtime deployment.json target to deploy them.
+            Use the runtime target only with a build that includes runtime policy delivery and enforcement.
           </Notice>
         ) : null}
         {errors.length ? (
@@ -81,9 +99,8 @@ export function ExportSection({
         ) : null}
         {needsBuild ? (
           <Notice tone="warning">
-            This policy uses build-time settings (capabilities, the welcome wizard), which legacy GeoLibre reads only
-            as build arguments, so it needs a custom image built from a GeoLibre checkout. The other settings work
-            with the published image. The runtime deployment.json target reads them at startup instead.
+            This policy uses build-time settings (<code>VITE_GEOLIBRE_CAPABILITIES</code> and{" "}
+            <code>VITE_WELCOME_DISABLED</code>). Use a custom image built from a GeoLibre checkout to include them.
           </Notice>
         ) : null}
         <div className="grid gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
@@ -100,7 +117,7 @@ export function ExportSection({
                   )}
                 >
                   <span className="block font-mono text-sm">{item.name}</span>
-                  <span className="block text-xs text-muted">{item.description}</span>
+                  <span className="block text-xs text-muted">{fileDescriptions[item.name] ?? item.description}</span>
                 </button>
               </li>
             ))}
@@ -123,15 +140,21 @@ export function ExportSection({
         <p className="text-xs text-muted">
           {target === "deployment" ? (
             <>
-              GeoLibre fetches <code>deployment.json</code> from the app root before the first render and ignores it
-              when it is missing, late (3 s) or blocked, so the settings fail open. Generating the file from an
-              environment variable (<code>GEOLIBRE_DEPLOYMENT_FILE</code>) is not shipped yet, so the commands mount it
-              directly. Capabilities and plugin allow or block lists are client-side hiding, not server enforcement.
+              Mount a separate input using <code>./deployment.json:/etc/geolibre/deployment.json:ro</code> and set{" "}
+              <code>GEOLIBRE_DEPLOYMENT_FILE=/etc/geolibre/deployment.json</code>. A runtime-capable container validates
+              the input at boot; invalid input aborts startup. Once using such a build, policy fields can change
+              without rebuilding the image. The container generates public{" "}
+              <code>/usr/share/nginx/html/deployment.json</code>. Nonblank <code>GEOLIBRE_*</code> variables override
+              input-file fields before generation. In the client, deployment.json overrides{" "}
+              <code>window.__GEOLIBRE_DEPLOYMENT_ENV__</code>, which overrides build settings; absent, invalid,
+              blocked, or late (over 3 seconds) client policy falls back to the next source, not always full access.
+              Only container route families are enforced; desktop provisioning and client plugin checks are not
+              security boundaries. Main-line images are published; v3.2.0 is the latest tagged release.
             </>
           ) : (
             <>
-              Released GeoLibre versions don't read <code>deployment.json</code>, so this target omits it. Re-export for
-              the runtime target once you run a build that includes it.
+              GeoLibre through v3.2.0 does not read <code>deployment.json</code>. Use runtime policy only with a build
+              that includes the runtime delivery and enforcement changes.
             </>
           )}
         </p>
