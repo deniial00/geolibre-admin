@@ -8,8 +8,8 @@ import type {
 /** Where the generated files are mounted in the GeoLibre container. */
 export const ADMIN_PROFILE_MOUNT = "/usr/share/nginx/html/admin-profile.json";
 export const SERVICES_MOUNT = "/config/geolibre-services.json";
-/** GeoLibre fetches `<base>/deployment.json`; GEOLIBRE_DEPLOYMENT_FILE generation is not shipped, so mount it directly. */
-export const DEPLOYMENT_MOUNT = "/usr/share/nginx/html/deployment.json";
+/** Read-only policy input consumed through GEOLIBRE_DEPLOYMENT_FILE; boot writes the separately served app-root file. */
+export const DEPLOYMENT_MOUNT = "/etc/geolibre/deployment.json";
 
 function isEmpty(value: unknown): boolean {
   if (value === undefined || value === null || value === "") return true;
@@ -178,7 +178,7 @@ export const EXPORT_TARGETS: { value: ExportTarget; label: string; description: 
     value: "deployment",
     label: "GeoLibre with runtime deployment.json",
     description:
-      "One deployment.json mounted into the app root, plus operator-only environment variables. Needs a GeoLibre build that includes opengeos/GeoLibre#2795 (on main, unreleased as of v3.2.0).",
+      "One deployment.json mounted read-only at /etc/geolibre/deployment.json and selected by GEOLIBRE_DEPLOYMENT_FILE; GeoLibre generates the served policy. Requires a build with merged runtime delivery and enforcement; v3.2.0 does not include them. Enabled AI also requires private operator proxy configuration.",
   },
 ];
 
@@ -211,7 +211,23 @@ interface Plan {
 
 function plan(policy: DeploymentPolicy, operator: OperatorSettings, target: ExportTarget): Plan {
   if (target === "deployment") {
-    return { args: [], env: operatorEnv(operator), mounts: [{ file: "deployment.json", target: DEPLOYMENT_MOUNT }] };
+    const env: Setting[] = [{ name: "GEOLIBRE_DEPLOYMENT_FILE", value: DEPLOYMENT_MOUNT }, ...operatorEnv(operator)];
+    if (policy.ai?.enabled === true) {
+      env.push(
+        { name: "GEOLIBRE_AI_URL", value: "/ai" },
+        {
+          name: "GEOLIBRE_AI_PROXY_URL",
+          value: "",
+          note: "Required when ai.enabled=true: fill in your AI proxy HTTPS origin, without credentials, path, query, or fragment.",
+        },
+        {
+          name: "GEOLIBRE_AI_PROXY_TOKEN",
+          value: "",
+          note: "Required when ai.enabled=true: fill in your private instance token using only A-Z, a-z, 0-9, dot, underscore, or hyphen. Never put it in deployment.json.",
+        },
+      );
+    }
+    return { args: [], env, mounts: [{ file: "deployment.json", target: DEPLOYMENT_MOUNT }] };
   }
   const mounts: Mount[] = [];
   if (toAdminProfile(policy)) mounts.push({ file: "admin-profile.json", target: ADMIN_PROFILE_MOUNT });
@@ -234,7 +250,14 @@ export function toDockerCommands(
 ): string {
   const { args, env, mounts } = plan(policy, operator, target);
   const image = args.length ? "geolibre-custom" : "ghcr.io/opengeos/geolibre:latest";
-  const blocks: string[] = [];
+  const blocks: string[] = target === "deployment"
+    ? [
+        "# Requires a GeoLibre image with merged runtime deployment delivery and enforcement; v3.2.0 does not include them.",
+        ...(policy.ai?.enabled === true
+          ? ["# Replace both empty AI proxy values below before running. Editing geolibre.env does not change this inline command."]
+          : []),
+      ]
+    : [];
   if (args.length) {
     const lines = ["# Build-time settings: run from a GeoLibre checkout.", "docker build \\"];
     for (const arg of args) lines.push(`  --build-arg ${arg.name}=${shellQuote(arg.value)} \\`);
@@ -259,7 +282,16 @@ export function toDockerCommands(
  */
 export function toCompose(policy: DeploymentPolicy, operator: OperatorSettings, target: ExportTarget): string {
   const { args, env, mounts } = plan(policy, operator, target);
-  const lines = ["services:", "  geolibre:"];
+  const lines = target === "deployment"
+    ? [
+        "# Requires a GeoLibre image with merged runtime deployment delivery and enforcement; v3.2.0 does not include them.",
+        ...(policy.ai?.enabled === true
+          ? ["# Replace both empty AI proxy values below before running. Editing geolibre.env does not change inline Compose values." ]
+          : []),
+        "services:",
+        "  geolibre:",
+      ]
+    : ["services:", "  geolibre:"];
   if (args.length) {
     lines.push("    build:", "      context: ./GeoLibre  # a GeoLibre checkout", "      args:");
     for (const arg of args) lines.push(`        ${arg.name}: ${yamlQuote(arg.value)}`);
@@ -302,7 +334,8 @@ export function exportFiles(
   if (target === "deployment") {
     files.push({
       name: "deployment.json",
-      description: `The whole policy: mount it at ${DEPLOYMENT_MOUNT} (GeoLibre fetches it from the app root at startup).`,
+      description:
+        "Public policy input: mount read-only at /etc/geolibre/deployment.json and set GEOLIBRE_DEPLOYMENT_FILE to that path. GeoLibre writes the served /deployment.json at boot; never mount over that output.",
       content: `${JSON.stringify(cleanPolicy(policy), null, 2)}\n`,
     });
   } else {
@@ -328,7 +361,7 @@ export function exportFiles(
       name: "geolibre.env",
       description:
         target === "deployment"
-          ? "Operator-only environment (sidecar, conversion roots, PostGIS hosts) for docker run --env-file or Compose."
+          ? "Deployment input path and operator-only environment for docker run --env-file or Compose env_file. Enabled AI includes required empty proxy placeholders; fill them before use."
           : "Runtime environment for docker run --env-file or Compose.",
       content: toEnvFile(env),
     },
@@ -336,7 +369,7 @@ export function exportFiles(
       name: "docker-run.sh",
       description:
         target === "deployment"
-          ? "Run command that mounts deployment.json."
+          ? "Run command using a separate read-only deployment policy input; enabled AI requires filling the operator proxy placeholders."
           : "Build (only when build-time settings are used) and run commands.",
       content: toDockerCommands(policy, operator, target),
     },

@@ -334,23 +334,85 @@ describe("export", () => {
     expect(legacyUnsupported({ version: 1, ai: { enabled: false } })).toHaveLength(1);
   });
 
-  it("emits deployment.json with a slim env and mounts it for the runtime target", () => {
+  it("emits the deployment input contract and operator-only AI configuration", () => {
     const op = { sidecar: true, conversionRoots: "/data", postgisHosts: "db.internal" };
     const files = exportFiles(full, op, "deployment");
     expect(files.map((file) => file.name)).toEqual(["deployment.json", "geolibre.env", "docker-run.sh", "compose.yaml"]);
     const byName = Object.fromEntries(files.map((file) => [file.name, file.content]));
-    expect(JSON.parse(byName["deployment.json"])).toEqual(cleanPolicy(full));
-    expect(byName["geolibre.env"]).toContain("GEOLIBRE_CONVERSION_ROOTS=/data");
-    expect(byName["geolibre.env"]).toContain("GEOLIBRE_POSTGIS_HOSTS=db.internal");
+    const deployment = JSON.parse(byName["deployment.json"]);
+    expect(deployment).toEqual(cleanPolicy(full));
+    expect(deployment.ai).toEqual({ enabled: true, model: "openai/gpt-5.6-luna" });
+    expect(deployment.ai).not.toHaveProperty("proxyUrl");
+    expect(deployment.ai).not.toHaveProperty("proxyToken");
+
+    const env = parseEnv(byName["geolibre.env"]);
+    expect(env.get("GEOLIBRE_DEPLOYMENT_FILE")).toBe("/etc/geolibre/deployment.json");
+    expect(env.get("GEOLIBRE_CONVERSION_ROOTS")).toBe("/data");
+    expect(env.get("GEOLIBRE_POSTGIS_HOSTS")).toBe("db.internal");
+    expect(env.get("GEOLIBRE_AI_URL")).toBe("/ai");
+    expect(env.get("GEOLIBRE_AI_PROXY_URL")).toBe("");
+    expect(env.get("GEOLIBRE_AI_PROXY_TOKEN")).toBe("");
     expect(byName["geolibre.env"]).not.toMatch(/SHARE_URL|APP_NAME|SERVICES_FILE|BUILTIN/);
+
+    expect(byName["docker-run.sh"]).toContain("-e GEOLIBRE_DEPLOYMENT_FILE=/etc/geolibre/deployment.json");
+    expect(byName["docker-run.sh"]).toContain("-e GEOLIBRE_AI_URL=/ai");
+    expect(byName["docker-run.sh"]).toContain("-e GEOLIBRE_AI_PROXY_URL=''");
+    expect(byName["docker-run.sh"]).toContain("-e GEOLIBRE_AI_PROXY_TOKEN=''");
+    expect(byName["docker-run.sh"]).toContain('-v "$PWD/deployment.json:/etc/geolibre/deployment.json:ro"');
+    expect(byName["docker-run.sh"]).not.toContain("/usr/share/nginx/html/deployment.json:ro");
     expect(byName["docker-run.sh"]).not.toContain("docker build");
     expect(byName["docker-run.sh"]).not.toContain("--build-arg");
-    expect(byName["docker-run.sh"]).toContain('-v "$PWD/deployment.json:/usr/share/nginx/html/deployment.json:ro"');
     expect(byName["docker-run.sh"]).not.toContain("admin-profile");
-    expect(byName["compose.yaml"]).toContain("./deployment.json:/usr/share/nginx/html/deployment.json:ro");
+
+    expect(byName["compose.yaml"]).toContain('GEOLIBRE_DEPLOYMENT_FILE: "/etc/geolibre/deployment.json"');
+    expect(byName["compose.yaml"]).toContain('GEOLIBRE_AI_URL: "/ai"');
+    expect(byName["compose.yaml"]).toContain('GEOLIBRE_AI_PROXY_URL: ""');
+    expect(byName["compose.yaml"]).toContain('GEOLIBRE_AI_PROXY_TOKEN: ""');
+    expect(byName["compose.yaml"]).toContain("./deployment.json:/etc/geolibre/deployment.json:ro");
+    expect(byName["compose.yaml"]).not.toContain("/usr/share/nginx/html/deployment.json:ro");
     expect(byName["compose.yaml"]).toContain("image: ghcr.io/opengeos/geolibre:latest");
     expect(byName["compose.yaml"]).not.toContain("build:");
     expect(operatorEnv({ ...op, sidecar: false })).toEqual([{ name: "GEOLIBRE_DISABLE_SIDECAR", value: "1" }]);
+    const sidecarDisabled = parseEnv(
+      exportFiles({ version: 1, capabilities: [] }, { ...op, sidecar: false }, "deployment")[1].content,
+    );
+    expect(sidecarDisabled.get("GEOLIBRE_DEPLOYMENT_FILE")).toBe("/etc/geolibre/deployment.json");
+    expect(sidecarDisabled.get("GEOLIBRE_DISABLE_SIDECAR")).toBe("1");
+  });
+
+  it("omits AI proxy settings unless the deployment policy explicitly enables AI", () => {
+    const policies: DeploymentPolicy[] = [
+      { version: 1 },
+      { version: 1, ai: { enabled: false } },
+      { version: 1, ai: {} },
+      { version: 1, ai: { model: "operator-model" } },
+    ];
+    for (const policy of policies) {
+      const env = parseEnv(exportFiles(policy, operator, "deployment")[1].content);
+      expect(env.has("GEOLIBRE_AI_URL")).toBe(false);
+      expect(env.has("GEOLIBRE_AI_PROXY_URL")).toBe(false);
+      expect(env.has("GEOLIBRE_AI_PROXY_TOKEN")).toBe(false);
+    }
+  });
+
+  it("keeps deployment inputs and AI proxy settings out of legacy exports", () => {
+    const files = exportFiles(full, operator, "legacy");
+    const contents = files.map((file) => file.content).join("\n");
+    expect(contents).not.toContain("GEOLIBRE_DEPLOYMENT_FILE");
+    expect(contents).not.toContain("GEOLIBRE_AI_PROXY_URL");
+    expect(contents).not.toContain("GEOLIBRE_AI_PROXY_TOKEN");
+    expect(files.map((file) => file.name)).toEqual([
+      "admin-profile.json",
+      "geolibre-services.json",
+      "geolibre.env",
+      "docker-run.sh",
+      "compose.yaml",
+    ]);
+    expect(toDockerCommands(full, operator, "legacy")).toContain("--build-arg VITE_GEOLIBRE_CAPABILITIES=data:add,export:data");
+    expect(toCompose(full, operator, "legacy")).toContain(
+      "./admin-profile.json:/usr/share/nginx/html/admin-profile.json:ro",
+    );
+    expect(legacyUnsupported(full)).toHaveLength(2);
   });
 });
 
