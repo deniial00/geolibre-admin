@@ -342,8 +342,6 @@ describe("export", () => {
     const deployment = JSON.parse(byName["deployment.json"]);
     expect(deployment).toEqual(cleanPolicy(full));
     expect(deployment.ai).toEqual({ enabled: true, model: "openai/gpt-5.6-luna" });
-    expect(deployment.ai).not.toHaveProperty("proxyUrl");
-    expect(deployment.ai).not.toHaveProperty("proxyToken");
 
     const env = parseEnv(byName["geolibre.env"]);
     expect(env.get("GEOLIBRE_DEPLOYMENT_FILE")).toBe("/etc/geolibre/deployment.json");

@@ -251,12 +251,12 @@ export function toDockerCommands(
   const { args, env, mounts } = plan(policy, operator, target);
   const image = args.length ? "geolibre-custom" : "ghcr.io/opengeos/geolibre:latest";
   const blocks: string[] = target === "deployment"
-    ? [
+    ? [[
         "# Requires a GeoLibre image with merged runtime deployment delivery and enforcement; v3.2.0 does not include them.",
         ...(policy.ai?.enabled === true
           ? ["# Replace both empty AI proxy values below before running. Editing geolibre.env does not change this inline command."]
           : []),
-      ]
+      ].join("\n")]
     : [];
   if (args.length) {
     const lines = ["# Build-time settings: run from a GeoLibre checkout.", "docker build \\"];
@@ -286,7 +286,7 @@ export function toCompose(policy: DeploymentPolicy, operator: OperatorSettings, 
     ? [
         "# Requires a GeoLibre image with merged runtime deployment delivery and enforcement; v3.2.0 does not include them.",
         ...(policy.ai?.enabled === true
-          ? ["# Replace both empty AI proxy values below before running. Editing geolibre.env does not change inline Compose values." ]
+          ? ["# Replace both empty AI proxy values below before running. Editing geolibre.env does not change inline Compose values."]
           : []),
         "services:",
         "  geolibre:",
