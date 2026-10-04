@@ -68,9 +68,10 @@ export function CapabilitiesSection({
           ))}
         </div>
         <Notice tone="warning">
-          In runtime-capable containers, `/sidecar/whitebox`, `/sidecar/raster`, `/sidecar/vector`,
-          `/sidecar/pointcloud`, `/sidecar/ml`, and `/sidecar/sql` require `processing:run`;
-          `/sidecar/postgis` requires `data:add`; `/sidecar/conversion` requires either. Without either
+          In runtime-capable containers, <code>/sidecar/whitebox</code>, <code>/sidecar/raster</code>,{" "}
+          <code>/sidecar/vector</code>, <code>/sidecar/pointcloud</code>, <code>/sidecar/ml</code>, and{" "}
+          <code>/sidecar/sql</code> require <code>processing:run</code>; <code>/sidecar/postgis</code> requires{" "}
+          <code>data:add</code>; <code>/sidecar/conversion</code> requires either. Without either
           grant the bundled sidecar is not started. Utility routes are outside these guards while it runs.
           These container route checks do not cover browser WASM, desktop processing, or separately exposed
           services; retain authentication and restrict conversion roots. Client policy can be unavailable or

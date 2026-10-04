@@ -4,6 +4,7 @@ import { EXPORT_TARGETS, buildArgs, exportFiles, legacyUnsupported, type ExportT
 import type { DeploymentPolicy, OperatorSettings } from "../policy/types";
 import type { Issue } from "../policy/validate";
 
+// export.ts still exposes older release descriptions; keep editor guidance accurate without changing its export API.
 const targetDescriptions: Record<ExportTarget, string> = {
   legacy:
     "Legacy files for GeoLibre through v3.2.0. Capabilities and welcome settings require build arguments.",
