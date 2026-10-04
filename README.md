@@ -82,9 +82,8 @@ The legacy target supports tagged GeoLibre releases through v3.2.0. Capabilities
 and welcome settings are build arguments (`VITE_GEOLIBRE_CAPABILITIES` and
 `VITE_WELCOME_DISABLED`); settings not supported by that target are listed
 instead of silently represented. See the
-[latest tagged release](https://api.github.com/repos/opengeos/GeoLibre/releases/latest),
+[latest tagged release](https://github.com/opengeos/GeoLibre/releases/latest),
 checked 2026-10-04.
-
 
 The runtime target requires a GeoLibre build containing merged policy delivery and enforcement. A main-line image is published as [`ghcr.io/opengeos/geolibre:sha-ffa8a2e`](https://github.com/opengeos/GeoLibre/pkgs/container/geolibre), from [source commit ffa8a2e](https://github.com/opengeos/GeoLibre/commit/ffa8a2e5ee1f5af2b4404072d5b74d0b6bf2c33a), checked 2026-10-04; the latest tagged release remains v3.2.0. This UI has not smoke-tested that image. Runtime builds validate policy during startup, abort on invalid or unreadable input, and enforce capabilities on protected sidecar routes. Client-side visibility controls alone are not a security boundary.
 
@@ -149,6 +148,8 @@ for OS-specific paths. The config is user-writable and is not a security
 boundary. The editor stores its selected export target in browser-local draft
 storage; importing a policy preserves that target, while **Start over** resets
 the target to legacy.
+
+## `deployment.json`
 
 [`schema/deployment.schema.json`](schema/deployment.schema.json) is a synced
 copy of GeoLibre's canonical schema for a single, versioned policy document.
