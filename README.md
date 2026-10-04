@@ -15,9 +15,10 @@ It has two parts:
   validates against GeoLibre's published schema with local cross-field checks
   and exports for one of two targets: *Legacy GeoLibre (<= v3.2.0)* gives
   files read by tagged releases and lists settings they cannot express;
-  *GeoLibre with runtime deployment.json* gives a policy, operator-only
-  environment, and startup commands for a separate mounted input at
-  `/etc/geolibre/deployment.json` plus `GEOLIBRE_DEPLOYMENT_FILE`.
+  *GeoLibre with runtime deployment.json* gives a policy and operator-only
+  environment. Mount the policy input manually at
+  `/etc/geolibre/deployment.json` and set `GEOLIBRE_DEPLOYMENT_FILE`; the
+  generated runtime `docker-run.sh` and `compose.yaml` are not deployment-ready.
 - **Organizations and groups.** A console for any server implementing the
   [GeoLibre projects API](https://github.com/opengeos/GeoLibre/blob/main/docs/server-api.md),
   such as the reference server in `backend/geolibre_server_api`: create and
