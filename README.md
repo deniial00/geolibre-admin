@@ -89,27 +89,29 @@ production.
 In releases up to v3.2.0, capabilities are build-time only
 ([GeoLibre#1673](https://github.com/opengeos/GeoLibre/issues/1673)); the legacy
 export says so and includes the `docker build` command when the policy needs
-it. With a runtime `deployment.json` they are read at startup but fail open (a
-missing, blocked or late file leaves the full grant). Capabilities and hidden
-items are client-side affordances, not a security boundary: protect `/sidecar`
-and `/ai` on the server.
+its features. The runtime deployment target requires a GeoLibre build with merged
+policy delivery and enforcement. That runtime validates its input during startup,
+fails boot on invalid or unreadable policy, and enforces capabilities on protected
+sidecar routes. Client-side interface and plugin visibility alone are not a
+security boundary.
 
 ## `deployment.json`
 
 [`schema/deployment.schema.json`](schema/deployment.schema.json) is a synced
-copy of GeoLibre's canonical `schema/deployment.schema.json`, the JSON Schema
-for a single, versioned policy document; `schema/SOURCE.json` records the
-GeoLibre commit it came from. GeoLibre fetches `<base>/deployment.json` at startup
-(opengeos/GeoLibre#2795, on `main` but unreleased as of v3.2.0; see its
-[deployment policy docs](https://github.com/opengeos/GeoLibre/blob/main/docs/deployment-policy.md)).
-Generating the file from an environment variable (`GEOLIBRE_DEPLOYMENT_FILE`)
-isn't shipped, so the exported commands mount it at
-`/usr/share/nginx/html/deployment.json`. Today GeoLibre applies only
-`plugins.registryUrl` from the plugins section; the allow/block lists,
-sideloading and default-active ids are stored but not enforced. Every value in it is
-published to visitors, so it never holds secrets or infrastructure settings;
-those are exported as environment variables only. Hiding things in the client
-is not enforcement.
+copy of GeoLibre's canonical schema for a single, versioned policy document.
+`schema/SOURCE.json` records the upstream commit the schema came from.
+
+The published v3.2.0 release still reads the served app-root policy and does not
+include merged runtime delivery or enforcement. GeoLibre's current main reads
+the public input through `GEOLIBRE_DEPLOYMENT_FILE` and atomically writes the
+separately served `/deployment.json` at startup. The deployment export mounts
+the input read-only at `/etc/geolibre/deployment.json` and sets that variable;
+do not mount over the served app-root file.
+
+The policy JSON is public and never contains secrets. When `ai.enabled` is true,
+GeoLibre also requires operator-only `GEOLIBRE_AI_URL=/ai`,
+`GEOLIBRE_AI_PROXY_URL`, and `GEOLIBRE_AI_PROXY_TOKEN` settings. Fill those
+values in the runtime environment, never in `deployment.json`.
 
 ## Development
 

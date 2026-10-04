@@ -123,10 +123,12 @@ export function ExportSection({
         <p className="text-xs text-muted">
           {target === "deployment" ? (
             <>
-              GeoLibre fetches <code>deployment.json</code> from the app root before the first render and ignores it
-              when it is missing, late (3 s) or blocked, so the settings fail open. Generating the file from an
-              environment variable (<code>GEOLIBRE_DEPLOYMENT_FILE</code>) is not shipped yet, so the commands mount it
-              directly. Capabilities and plugin allow or block lists are client-side hiding, not server enforcement.
+              GeoLibre's current main reads the public policy from{" "}
+              <code>GEOLIBRE_DEPLOYMENT_FILE</code> and writes the served <code>/deployment.json</code> at boot. The
+              exporter mounts that input read-only at <code>/etc/geolibre/deployment.json</code>. This requires a build
+              with merged runtime delivery and enforcement; released v3.2.0 does not include it. Enabled AI requires
+              filling the operator proxy URL and token placeholders in the export format you use; never put
+              credentials in the policy JSON.
             </>
           ) : (
             <>
