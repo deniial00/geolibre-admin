@@ -15,10 +15,10 @@ It has two parts:
   validates against GeoLibre's published schema with local cross-field checks
   and exports for one of two targets: *Legacy GeoLibre (<= v3.2.0)* gives
   files read by tagged releases and lists settings they cannot express;
-  *GeoLibre with runtime deployment.json* gives a policy and operator-only
-  environment. Mount the policy input manually at
-  `/etc/geolibre/deployment.json` and set `GEOLIBRE_DEPLOYMENT_FILE`; the
-  generated runtime `docker-run.sh` and `compose.yaml` are not deployment-ready.
+  *GeoLibre with runtime deployment.json* gives policy and operator-only
+  environment files; its generated `docker-run.sh` and `compose.yaml` mount the
+  input read-only at `/etc/geolibre/deployment.json` and set
+  `GEOLIBRE_DEPLOYMENT_FILE`.
 - **Organizations and groups.** A console for any server implementing the
   [GeoLibre projects API](https://github.com/opengeos/GeoLibre/blob/main/docs/server-api.md),
   such as the reference server in `backend/geolibre_server_api`: create and
@@ -85,12 +85,8 @@ instead of silently represented. See the
 [latest tagged release](https://api.github.com/repos/opengeos/GeoLibre/releases/latest),
 checked 2026-10-04.
 
-The runtime target requires a GeoLibre build containing runtime policy delivery
-and enforcement (Parts 1–6). A main-line image is published as
-[`ghcr.io/opengeos/geolibre:sha-ffa8a2e`](https://github.com/opengeos/GeoLibre/pkgs/container/geolibre),
-from [source commit ffa8a2e](https://github.com/opengeos/GeoLibre/commit/ffa8a2e5ee1f5af2b4404072d5b74d0b6bf2c33a),
-checked 2026-10-04; the latest tagged release remains v3.2.0. This UI has not
-smoke-tested that image.
+
+The runtime target requires a GeoLibre build containing merged policy delivery and enforcement. A main-line image is published as [`ghcr.io/opengeos/geolibre:sha-ffa8a2e`](https://github.com/opengeos/GeoLibre/pkgs/container/geolibre), from [source commit ffa8a2e](https://github.com/opengeos/GeoLibre/commit/ffa8a2e5ee1f5af2b4404072d5b74d0b6bf2c33a), checked 2026-10-04; the latest tagged release remains v3.2.0. This UI has not smoke-tested that image. Runtime builds validate policy during startup, abort on invalid or unreadable input, and enforce capabilities on protected sidecar routes. Client-side visibility controls alone are not a security boundary.
 
 Mount an input policy separately from generated public output:
 
@@ -101,19 +97,18 @@ environment:
   GEOLIBRE_DEPLOYMENT_FILE: /etc/geolibre/deployment.json
 ```
 
-The generated `docker-run.sh` and `compose.yaml` artifacts have not yet been
-updated for this input contract: they mount the generated public output directly
-and omit `GEOLIBRE_DEPLOYMENT_FILE`. Do not use those generated commands for the
-runtime target until that export fix is integrated; configure the separate input
-mount and variable as shown above.
+The generated `docker-run.sh` and `compose.yaml` use this input contract: they
+mount `./deployment.json` read-only at `/etc/geolibre/deployment.json` and set
+`GEOLIBRE_DEPLOYMENT_FILE` to that path.
 
-At each container boot, the input is validated; invalid input aborts startup.
-Nonblank `GEOLIBRE_*` environment values override matching input fields before
-the container generates public `/usr/share/nginx/html/deployment.json`. Never
-put secrets in that public policy. Client precedence is different:
-`deployment.json` > `window.__GEOLIBRE_DEPLOYMENT_ENV__` > build-time settings.
-Missing, invalid, blocked, or later-than-3-second client policy fetches fall
-through to the next source/defaults; this is not invariably a full grant.
+At each container boot, the input is validated; invalid or unreadable input
+aborts startup. Nonblank `GEOLIBRE_*` environment values override matching
+input fields before the container atomically generates public
+`/usr/share/nginx/html/deployment.json`. Never put secrets in that public
+policy. Client precedence is different: `deployment.json` >
+`window.__GEOLIBRE_DEPLOYMENT_ENV__` > build-time settings. Missing, invalid,
+blocked, or later-than-3-second client policy fetches fall through to the next
+source/defaults; this is not invariably a full grant.
 
 Container route enforcement applies only to these bundled sidecar routes:
 
@@ -155,9 +150,10 @@ boundary. The editor stores its selected export target in browser-local draft
 storage; importing a policy preserves that target, while **Start over** resets
 the target to legacy.
 
-`schema/deployment.schema.json` is synced from GeoLibre's canonical
-`schema/deployment.schema.json`; `schema/SOURCE.json` records its source commit.
-See [deployment policy docs](https://github.com/opengeos/GeoLibre/blob/main/docs/deployment-policy.md)
+[`schema/deployment.schema.json`](schema/deployment.schema.json) is a synced
+copy of GeoLibre's canonical schema for a single, versioned policy document.
+`schema/SOURCE.json` records the upstream commit the schema came from. See the
+[deployment policy docs](https://github.com/opengeos/GeoLibre/blob/main/docs/deployment-policy.md)
 and [capability docs](https://github.com/opengeos/GeoLibre/blob/main/docs/deployment-capabilities.md).
 
 ## Development

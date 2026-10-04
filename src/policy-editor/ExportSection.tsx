@@ -4,21 +4,6 @@ import { EXPORT_TARGETS, buildArgs, exportFiles, legacyUnsupported, type ExportT
 import type { DeploymentPolicy, OperatorSettings } from "../policy/types";
 import type { Issue } from "../policy/validate";
 
-// export.ts still exposes older release descriptions; keep editor guidance accurate without changing its export API.
-const targetDescriptions: Record<ExportTarget, string> = {
-  legacy:
-    "Legacy files for GeoLibre through v3.2.0. Capabilities and welcome settings require build arguments.",
-  deployment:
-    "Runtime policy for builds containing Parts 1–6: main-line images are published, but the latest tagged release is v3.2.0. Mount a separate policy input and set GEOLIBRE_DEPLOYMENT_FILE.",
-};
-
-const fileDescriptions: Record<string, string> = {
-  "deployment.json": "Public policy input; mount separately and set GEOLIBRE_DEPLOYMENT_FILE.",
-  "docker-run.sh":
-    "Not deployment-ready: mounts the generated public output and omits GEOLIBRE_DEPLOYMENT_FILE. Do not use until the exporter is corrected.",
-  "compose.yaml":
-    "Not deployment-ready: mounts the generated public output and omits GEOLIBRE_DEPLOYMENT_FILE. Do not use until the exporter is corrected.",
-};
 
 export function ExportSection({
   policy,
@@ -79,7 +64,7 @@ export function ExportSection({
                   />
                   {option.label}
                 </span>
-                <span className="text-xs text-muted">{targetDescriptions[option.value]}</span>
+                <span className="text-xs text-muted">{option.description}</span>
               </label>
             ))}
           </div>
@@ -118,9 +103,7 @@ export function ExportSection({
                   )}
                 >
                   <span className="block font-mono text-sm">{item.name}</span>
-                  <span className="block text-xs text-muted">
-                    {target === "deployment" ? fileDescriptions[item.name] ?? item.description : item.description}
-                  </span>
+                  <span className="block text-xs text-muted">{item.description}</span>
                 </button>
               </li>
             ))}
@@ -143,16 +126,17 @@ export function ExportSection({
         <p className="text-xs text-muted">
           {target === "deployment" ? (
             <>
-              Mount a separate input using <code>./deployment.json:/etc/geolibre/deployment.json:ro</code> and set{" "}
-              <code>GEOLIBRE_DEPLOYMENT_FILE=/etc/geolibre/deployment.json</code>. A runtime-capable container validates
-              the input at boot; invalid input aborts startup. Once using such a build, policy fields can change
-              without rebuilding the image. The container generates public{" "}
-              <code>/usr/share/nginx/html/deployment.json</code>. Nonblank <code>GEOLIBRE_*</code> variables override
-              input-file fields before generation. In the client, deployment.json overrides{" "}
+              Use the separate input mount <code>./deployment.json:/etc/geolibre/deployment.json:ro</code> and set{" "}
+              <code>GEOLIBRE_DEPLOYMENT_FILE=/etc/geolibre/deployment.json</code>. The generated{" "}
+              <code>docker-run.sh</code> and <code>compose.yaml</code> use this input contract. A runtime-capable
+              container validates it at boot; invalid or unreadable input aborts startup. Policy changes on a
+              runtime-capable build do not require rebuilding. The container atomically writes public{" "}
+              <code>/usr/share/nginx/html/deployment.json</code>; nonblank <code>GEOLIBRE_*</code> variables override
+              input fields before generation. In the client, deployment.json overrides{" "}
               <code>window.__GEOLIBRE_DEPLOYMENT_ENV__</code>, which overrides build settings; absent, invalid,
               blocked, or late (over 3 seconds) client policy falls back to the next source, not always full access.
               Only container route families are enforced; desktop provisioning and client plugin checks are not
-              security boundaries. Main-line images are published; v3.2.0 is the latest tagged release.
+              security boundaries.
             </>
           ) : (
             <>
