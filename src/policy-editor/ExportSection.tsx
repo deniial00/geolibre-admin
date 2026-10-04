@@ -117,7 +117,9 @@ export function ExportSection({
                   )}
                 >
                   <span className="block font-mono text-sm">{item.name}</span>
-                  <span className="block text-xs text-muted">{fileDescriptions[item.name] ?? item.description}</span>
+                  <span className="block text-xs text-muted">
+                    {target === "deployment" ? fileDescriptions[item.name] ?? item.description : item.description}
+                  </span>
                 </button>
               </li>
             ))}
