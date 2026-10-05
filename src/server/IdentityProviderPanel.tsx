@@ -67,6 +67,11 @@ export function IdentityProviderPanel({
   const [discovery, setDiscovery] = useState<DiscoveryResult | null>(null);
   const [checking, setChecking] = useState(false);
   const discoveryCheckId = useRef(0);
+  const invalidateDiscoveryCheck = () => {
+    discoveryCheckId.current += 1;
+    setChecking(false);
+    setDiscovery(null);
+  };
   const save = useAction();
   const toggle = useAction();
   const remove = useAction();
@@ -74,7 +79,7 @@ export function IdentityProviderPanel({
 
   const beginEdit = (draft: IdentityProviderDraft) => {
     setSaved(false);
-    setDiscovery(null);
+    invalidateDiscoveryCheck();
     setEditing(draft);
   };
 
@@ -96,12 +101,12 @@ export function IdentityProviderPanel({
       <div className="flex flex-col gap-2">
         {discovery.problems.length ? (
           <Notice tone="danger">
-            <ul className="list-disc ps-5">{discovery.problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>
+            <ul className="list-disc ps-5">{discovery.problems.map((problem, index) => <li key={`${problem}-${index}`}>{problem}</li>)}</ul>
           </Notice>
         ) : null}
         {discovery.warnings.length ? (
           <Notice tone="warning">
-            <ul className="list-disc ps-5">{discovery.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+            <ul className="list-disc ps-5">{discovery.warnings.map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}</ul>
           </Notice>
         ) : null}
         {!discovery.problems.length && !discovery.warnings.length ? (
@@ -241,8 +246,8 @@ export function IdentityProviderPanel({
           void save.run(async () => {
             const result = await server.setIdentityProvider(organization.id, toRequestBody(draft));
             provider.setData(result);
+            invalidateDiscoveryCheck();
             setEditing(null);
-            setDiscovery(null);
             setSaved(true);
           });
         }}
@@ -284,9 +289,7 @@ export function IdentityProviderPanel({
                     value={draft.issuer}
                     placeholder={PRESETS[draft.preset].issuerPlaceholder}
                     onChange={(event) => {
-                      discoveryCheckId.current += 1;
-                      setChecking(false);
-                      setDiscovery(null);
+                      invalidateDiscoveryCheck();
                       update({ issuer: event.target.value });
                     }}
                   />
@@ -490,7 +493,7 @@ export function IdentityProviderPanel({
           <Button type="submit" variant="primary" disabled={mutationBusy || Object.keys(errors).length > 0}>
             {creating ? "Connect provider" : "Save"}
           </Button>
-          <Button disabled={mutationBusy} onClick={() => { setEditing(null); setDiscovery(null); }}>Cancel</Button>
+          <Button disabled={mutationBusy} onClick={() => { invalidateDiscoveryCheck(); setEditing(null); }}>Cancel</Button>
         </div>
         </fieldset>
       </form>
