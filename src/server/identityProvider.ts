@@ -105,6 +105,8 @@ export function detectPreset(issuer: string): PresetId {
 }
 
 export type EndpointMode = "discovery" | "manual";
+type DraftRoleMapping = RoleMapping & { id: string };
+type DraftGroupMapping = GroupMapping & { id: string };
 
 export interface IdentityProviderDraft {
   preset: PresetId;
@@ -121,8 +123,8 @@ export interface IdentityProviderDraft {
   emailClaim: string;
   groupsClaim: string;
   defaultRole: OrganizationRole;
-  roleMappings: RoleMapping[];
-  groupMappings: GroupMapping[];
+  roleMappings: DraftRoleMapping[];
+  groupMappings: DraftGroupMapping[];
   requireMfa: boolean;
   allowBuiltinAccounts: boolean;
   breakGlassUsername: string;
@@ -174,7 +176,8 @@ export function draftFromProvider(provider: IdentityProvider): IdentityProviderD
     issuer: provider.issuer,
     clientId: provider.clientId,
     clientSecret: "",
-    endpointMode: "discovery",
+    // The GET contract has no discovery/manual flag; resubmit the saved endpoints so edits don't unexpectedly rerun discovery.
+    endpointMode: "manual",
     authorizationEndpoint: provider.authorizationEndpoint,
     tokenEndpoint: provider.tokenEndpoint,
     jwksUri: provider.jwksUri,
@@ -184,8 +187,8 @@ export function draftFromProvider(provider: IdentityProvider): IdentityProviderD
     emailClaim: provider.emailClaim,
     groupsClaim: provider.groupsClaim ?? "",
     defaultRole: provider.defaultRole,
-    roleMappings: provider.roleMappings.map((mapping) => ({ ...mapping })),
-    groupMappings: provider.groupMappings.map((mapping) => ({ ...mapping })),
+    roleMappings: provider.roleMappings.map((mapping) => ({ ...mapping, id: crypto.randomUUID() })),
+    groupMappings: provider.groupMappings.map((mapping) => ({ ...mapping, id: crypto.randomUUID() })),
     requireMfa: provider.requireMfa,
     allowBuiltinAccounts: provider.allowBuiltinAccounts,
     breakGlassUsername: provider.breakGlassUsername ?? "",
@@ -293,8 +296,8 @@ export function toRequestBody(draft: IdentityProviderDraft): IdentityProviderBod
     emailClaim: draft.emailClaim,
     groupsClaim: draft.groupsClaim.trim() || null,
     defaultRole: draft.defaultRole,
-    roleMappings: draft.roleMappings.map((mapping) => ({ ...mapping, value: mapping.value.trim() })),
-    groupMappings: draft.groupMappings.map((mapping) => ({ ...mapping, value: mapping.value.trim() })),
+    roleMappings: draft.roleMappings.map(({ value, role }) => ({ value: value.trim(), role })),
+    groupMappings: draft.groupMappings.map(({ value, groupId }) => ({ value: value.trim(), groupId })),
     requireMfa: draft.requireMfa,
     allowBuiltinAccounts: draft.allowBuiltinAccounts,
     breakGlassUsername: draft.breakGlassUsername || null,

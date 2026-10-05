@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { IdentityProvider } from "../src/api/client";
 import {
   PRESETS,
   applyPreset,
@@ -6,6 +7,7 @@ import {
   detectPreset,
   discoveryUrl,
   emptyDraft,
+  draftFromProvider,
   toRequestBody,
   validateDraft,
 } from "../src/server/identityProvider";
@@ -49,11 +51,11 @@ describe("identity provider drafts", () => {
     draft.clientSecret = "secret";
     expect(validateDraft(draft, { creating: true })).toEqual({});
 
-    const updated = applyPreset({ ...draft, roleMappings: [{ value: "admins", role: "administrator" }] }, "google");
+    const updated = applyPreset({ ...draft, roleMappings: [{ id: "role-1", value: "admins", role: "administrator" }] }, "google");
     expect(updated.issuer).toBe(draft.issuer);
     expect(updated.clientId).toBe(draft.clientId);
     expect(updated.clientSecret).toBe(draft.clientSecret);
-    expect(updated.roleMappings).toEqual([{ value: "admins", role: "administrator" }]);
+    expect(updated.roleMappings).toEqual([{ id: "role-1", value: "admins", role: "administrator" }]);
     expect(updated.scopes).toEqual(PRESETS.google.scopes);
     expect(updated.usernameClaim).toBe("email");
     expect(updated.groupsClaim).toBe("");
@@ -64,9 +66,13 @@ describe("identity provider drafts", () => {
     draft.issuer = " https://idp.example.org/realms/a/ ";
     draft.clientId = " client ";
     draft.groupsClaim = "";
+    draft.roleMappings = [{ id: "role-1", value: " admins ", role: "administrator" }];
+    draft.groupMappings = [{ id: "group-1", value: " team ", groupId: "org-group" }];
     const body = toRequestBody(draft);
     expect(body.issuer).toBe("https://idp.example.org/realms/a/");
     expect(body.clientId).toBe("client");
+    expect(body.roleMappings).toEqual([{ value: "admins", role: "administrator" }]);
+    expect(body.groupMappings).toEqual([{ value: "team", groupId: "org-group" }]);
     expect(body.groupsClaim).toBeNull();
     expect("clientSecret" in body).toBe(false);
     expect("authorizationEndpoint" in body).toBe(false);
@@ -75,6 +81,47 @@ describe("identity provider drafts", () => {
     expect("preset" in body).toBe(false);
     expect("endpointMode" in body).toBe(false);
   });
+  it("keeps saved endpoints on edits and strips stable row IDs from request bodies", () => {
+    const provider: IdentityProvider = {
+      issuer: "https://idp.example.org/realms/acme",
+      clientId: "geolibre",
+      tokenEndpointAuthMethod: "client_secret_basic",
+      scopes: ["openid", "email"],
+      usernameClaim: "preferred_username",
+      emailClaim: "email",
+      groupsClaim: "groups",
+      defaultRole: "member",
+      roleMappings: [
+        { value: "admins", role: "administrator" },
+        { value: "editors", role: "publisher" },
+      ],
+      groupMappings: [{ value: "engineering", groupId: "group-1" }],
+      requireMfa: false,
+      allowBuiltinAccounts: true,
+      breakGlassUsername: null,
+      enabled: true,
+      protocol: "oidc",
+      clientSecretSet: true,
+      authorizationEndpoint: "https://idp.example.org/authorize",
+      tokenEndpoint: "https://idp.example.org/token",
+      jwksUri: "https://idp.example.org/jwks",
+      redirectUri: null,
+      updatedAt: "2026-10-04T00:00:00Z",
+    };
+    const draft = draftFromProvider(provider);
+    const body = toRequestBody(draft);
+    const rowIds = [...draft.roleMappings, ...draft.groupMappings].map((mapping) => mapping.id);
+    expect(draft.endpointMode).toBe("manual");
+    expect(body.authorizationEndpoint).toBe(provider.authorizationEndpoint);
+    expect(body.tokenEndpoint).toBe(provider.tokenEndpoint);
+    expect(body.jwksUri).toBe(provider.jwksUri);
+    expect(new Set(rowIds).size).toBe(rowIds.length);
+    expect(body.roleMappings).toEqual(provider.roleMappings);
+    expect(body.groupMappings).toEqual(provider.groupMappings);
+    expect(body.roleMappings.every((mapping) => !("id" in mapping))).toBe(true);
+    expect(body.groupMappings.every((mapping) => !("id" in mapping))).toBe(true);
+  });
+
 
   it("detects each provider preset and otherwise uses the generic preset", () => {
     expect(detectPreset("https://login.microsoftonline.com/tenant/v2.0")).toBe("entra");

@@ -70,6 +70,7 @@ export function IdentityProviderPanel({
   const save = useAction();
   const toggle = useAction();
   const remove = useAction();
+  const mutationBusy = save.busy || toggle.busy || remove.busy;
 
   const beginEdit = (draft: IdentityProviderDraft) => {
     setSaved(false);
@@ -188,13 +189,13 @@ export function IdentityProviderPanel({
       {remove.error ? <Notice tone="danger">{remove.error}</Notice> : null}
       {saved ? <Notice tone="ok">Saved.</Notice> : null}
       <div className="flex flex-wrap gap-2">
-        <Button onClick={() => beginEdit(draftFromProvider(p))}>Edit</Button>
+        <Button disabled={mutationBusy} onClick={() => beginEdit(draftFromProvider(p))}>Edit</Button>
         <Button
-          disabled={toggle.busy}
+          disabled={mutationBusy}
           onClick={() => {
             setSaved(false);
             void toggle.run(async () => {
-              const draft = { ...draftFromProvider(p), endpointMode: "manual" as const, enabled: !p.enabled };
+              const draft = { ...draftFromProvider(p), enabled: !p.enabled };
               provider.setData(await server.setIdentityProvider(organization.id, toRequestBody(draft)));
             });
           }}
@@ -202,7 +203,7 @@ export function IdentityProviderPanel({
           {p.enabled ? "Disable" : "Enable"}
         </Button>
         <ConfirmButton
-          disabled={remove.busy}
+          disabled={mutationBusy}
           confirmLabel="Remove? Click again"
           onConfirm={() => {
             setSaved(false);
@@ -231,9 +232,11 @@ export function IdentityProviderPanel({
 
     return (
       <form
+        aria-busy={mutationBusy}
         className="flex flex-col gap-6"
         onSubmit={(event) => {
           event.preventDefault();
+          if (mutationBusy) return;
           setSaved(false);
           void save.run(async () => {
             const result = await server.setIdentityProvider(organization.id, toRequestBody(draft));
@@ -244,6 +247,7 @@ export function IdentityProviderPanel({
           });
         }}
       >
+        <fieldset disabled={mutationBusy} className="contents">
         <section className="flex flex-col gap-4">
           <h3 className="text-sm font-semibold">Provider</h3>
           <Field label="Provider">
@@ -328,23 +332,28 @@ export function IdentityProviderPanel({
         <section className="flex flex-col gap-4">
           <h3 className="text-sm font-semibold">Endpoints</h3>
           <Checkbox
-            label="Set endpoints manually"
-            description="Only for providers without a discovery document. Otherwise the server reads them from the issuer on every save."
+            label={provider.data ? "Keep saved endpoints" : "Set endpoints manually"}
+            description={provider.data
+              ? "Keeps the saved endpoints on updates; uncheck to let the server rediscover them from the issuer on save."
+              : "Only for providers without a discovery document. Otherwise the server reads them from the issuer on every save."}
             checked={draft.endpointMode === "manual"}
             onChange={(checked) => update({ endpointMode: checked ? "manual" : "discovery" })}
           />
           {draft.endpointMode === "manual" ? (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Authorization endpoint" error={errors.endpoints}>
-                {(id) => <Input id={id} value={draft.authorizationEndpoint} onChange={(event) => update({ authorizationEndpoint: event.target.value })} />}
-              </Field>
-              <Field label="Token endpoint">
-                {(id) => <Input id={id} value={draft.tokenEndpoint} onChange={(event) => update({ tokenEndpoint: event.target.value })} />}
-              </Field>
-              <Field label="JWKS URI">
-                {(id) => <Input id={id} value={draft.jwksUri} onChange={(event) => update({ jwksUri: event.target.value })} />}
-              </Field>
-            </div>
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Authorization endpoint">
+                  {(id) => <Input id={id} value={draft.authorizationEndpoint} onChange={(event) => update({ authorizationEndpoint: event.target.value })} />}
+                </Field>
+                <Field label="Token endpoint">
+                  {(id) => <Input id={id} value={draft.tokenEndpoint} onChange={(event) => update({ tokenEndpoint: event.target.value })} />}
+                </Field>
+                <Field label="JWKS URI">
+                  {(id) => <Input id={id} value={draft.jwksUri} onChange={(event) => update({ jwksUri: event.target.value })} />}
+                </Field>
+              </div>
+              {errors.endpoints ? <p role="alert" className="text-xs text-danger">{errors.endpoints}</p> : null}
+            </>
           ) : null}
         </section>
 
@@ -375,52 +384,55 @@ export function IdentityProviderPanel({
               </Select>
             )}
           </Field>
+          {draft.defaultRole === "administrator" ? (
+            <Notice tone="warning">New members without a matching role mapping become organization administrators. Use this default only when intended.</Notice>
+          ) : null}
           <div className="flex flex-col gap-2">
             <h4 className="text-sm font-medium">Role mappings</h4>
-            {draft.roleMappings.map((mapping, index) => (
-              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_12rem_auto]" key={index}>
+            {draft.roleMappings.map((mapping) => (
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_12rem_auto]" key={mapping.id}>
                 <Input
                   aria-label="Group claim value"
                   value={mapping.value}
-                  onChange={(event) => update({ roleMappings: draft.roleMappings.map((item, i) => i === index ? { ...item, value: event.target.value } : item) })}
+                  onChange={(event) => update({ roleMappings: draft.roleMappings.map((item) => item.id === mapping.id ? { ...item, value: event.target.value } : item) })}
                 />
                 <Select
                   aria-label="Mapped role"
                   value={mapping.role}
-                  onChange={(event) => update({ roleMappings: draft.roleMappings.map((item, i) => i === index ? { ...item, role: event.target.value as OrganizationRole } : item) })}
+                  onChange={(event) => update({ roleMappings: draft.roleMappings.map((item) => item.id === mapping.id ? { ...item, role: event.target.value as OrganizationRole } : item) })}
                 >
                   {ORGANIZATION_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
                 </Select>
-                <Button size="sm" variant="ghost" onClick={() => update({ roleMappings: draft.roleMappings.filter((_, i) => i !== index) })}>Remove</Button>
+                <Button size="sm" variant="ghost" onClick={() => update({ roleMappings: draft.roleMappings.filter((item) => item.id !== mapping.id) })}>Remove</Button>
               </div>
             ))}
             <p className="text-xs text-muted">
               The highest-ranked matching role wins. With any mapping set, existing members' roles follow it at every sign-in (the last and break-glass administrators are never demoted).
             </p>
             {errors.roleMappings ? <p className="text-xs text-danger">{errors.roleMappings}</p> : null}
-            <div><Button size="sm" onClick={() => update({ roleMappings: [...draft.roleMappings, { value: "", role: "member" }]})}>Add role mapping</Button></div>
+            <div><Button size="sm" onClick={() => update({ roleMappings: [...draft.roleMappings, { id: crypto.randomUUID(), value: "", role: "member" }]})}>Add role mapping</Button></div>
           </div>
           <div className="flex flex-col gap-2">
             <h4 className="text-sm font-medium">Group mappings</h4>
-            {draft.groupMappings.map((mapping, index) => {
+            {draft.groupMappings.map((mapping) => {
               const knownGroup = groups.some((group) => group.id === mapping.groupId);
               return (
-                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_12rem_auto]" key={index}>
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_12rem_auto]" key={mapping.id}>
                   <Input
                     aria-label="Group claim value"
                     value={mapping.value}
-                    onChange={(event) => update({ groupMappings: draft.groupMappings.map((item, i) => i === index ? { ...item, value: event.target.value } : item) })}
+                    onChange={(event) => update({ groupMappings: draft.groupMappings.map((item) => item.id === mapping.id ? { ...item, value: event.target.value } : item) })}
                   />
                   <Select
                     aria-label="Mapped group"
                     value={mapping.groupId}
-                    onChange={(event) => update({ groupMappings: draft.groupMappings.map((item, i) => i === index ? { ...item, groupId: event.target.value } : item) })}
+                    onChange={(event) => update({ groupMappings: draft.groupMappings.map((item) => item.id === mapping.id ? { ...item, groupId: event.target.value } : item) })}
                   >
                     <option value="">Pick a group</option>
                     {mapping.groupId && !knownGroup ? <option value={mapping.groupId}>Unknown group ({mapping.groupId})</option> : null}
                     {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
                   </Select>
-                  <Button size="sm" variant="ghost" onClick={() => update({ groupMappings: draft.groupMappings.filter((_, i) => i !== index) })}>Remove</Button>
+                  <Button size="sm" variant="ghost" onClick={() => update({ groupMappings: draft.groupMappings.filter((item) => item.id !== mapping.id) })}>Remove</Button>
                 </div>
               );
             })}
@@ -429,7 +441,7 @@ export function IdentityProviderPanel({
             </p>
             {errors.groupMappings ? <p className="text-xs text-danger">{errors.groupMappings}</p> : null}
             <div>
-              <Button size="sm" disabled={!groups.length} onClick={() => update({ groupMappings: [...draft.groupMappings, { value: "", groupId: "" }] })}>Add group mapping</Button>
+              <Button size="sm" disabled={!groups.length} onClick={() => update({ groupMappings: [...draft.groupMappings, { id: crypto.randomUUID(), value: "", groupId: "" }] })}>Add group mapping</Button>
             </div>
           </div>
         </section>
@@ -475,11 +487,12 @@ export function IdentityProviderPanel({
           </Notice>
         ) : null}
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" variant="primary" disabled={save.busy || Object.keys(errors).length > 0}>
+          <Button type="submit" variant="primary" disabled={mutationBusy || Object.keys(errors).length > 0}>
             {creating ? "Connect provider" : "Save"}
           </Button>
-          <Button onClick={() => { setEditing(null); setDiscovery(null); }}>Cancel</Button>
+          <Button disabled={mutationBusy} onClick={() => { setEditing(null); setDiscovery(null); }}>Cancel</Button>
         </div>
+        </fieldset>
       </form>
     );
   };
