@@ -43,6 +43,44 @@ describe("identity provider drafts", () => {
       "a break-glass administrator is required when built-in accounts are disallowed",
     );
   });
+  it("enforces upper bounds for scopes, mappings, issuer, and client secret", () => {
+    const draft = emptyDraft();
+    const issuerPrefix = "https://idp.example.org/";
+    draft.issuer = issuerPrefix + "a".repeat(512 - issuerPrefix.length);
+    draft.clientId = "client";
+    draft.clientSecret = "s".repeat(512);
+    draft.scopes = ["openid", ...Array.from({ length: 19 }, (_, index) => `scope${index}`)];
+    draft.roleMappings = Array.from({ length: 100 }, (_, index) => ({
+      id: `role-${index}`,
+      value: `role-${index}`,
+      role: "member" as const,
+    }));
+    draft.groupMappings = Array.from({ length: 100 }, (_, index) => ({
+      id: `group-${index}`,
+      value: `group-${index}`,
+      groupId: `group-${index}`,
+    }));
+    expect(validateDraft(draft, { creating: true })).toEqual({});
+
+    const errors = validateDraft(
+      {
+        ...draft,
+        issuer: `${draft.issuer}x`,
+        clientSecret: `${draft.clientSecret}x`,
+        scopes: [...draft.scopes, "scope-extra"],
+        roleMappings: [...draft.roleMappings, { id: "role-100", value: "role-100", role: "member" }],
+        groupMappings: [...draft.groupMappings, { id: "group-100", value: "group-100", groupId: "group-100" }],
+      },
+      { creating: true },
+    );
+    expect(errors).toMatchObject({
+      issuer: "Up to 512 characters.",
+      clientSecret: "Up to 512 characters.",
+      scopes: "Up to 20 scopes.",
+      roleMappings: "Up to 100 mappings.",
+      groupMappings: "Up to 100 mappings.",
+    });
+  });
 
   it("accepts a complete draft and applies preset claim defaults without replacing connection data", () => {
     const draft = emptyDraft();
@@ -169,6 +207,23 @@ describe("identity provider drafts", () => {
         'The document\'s issuer is "https://different.example.org". GeoLibre compares it exactly, so use that value.',
       ]);
       expect(result.warnings).toContain("The provider doesn't list S256 PKCE, which GeoLibre requires.");
+    }
+  });
+  it("reports a missing discovery issuer without rendering undefined", async () => {
+    const draft = emptyDraft();
+    draft.issuer = "https://idp.example.org";
+    const result = await checkDiscovery(draft, async () => new Response(JSON.stringify({
+      authorization_endpoint: "https://idp.example.org/authorize",
+      token_endpoint: "https://idp.example.org/token",
+      jwks_uri: "https://idp.example.org/jwks",
+    }), { status: 200 }));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.problems).toContain(
+        "The document's issuer is missing or not a string. GeoLibre compares it exactly.",
+      );
+      expect(result.problems.some((problem) => problem.includes("undefined"))).toBe(false);
     }
   });
 

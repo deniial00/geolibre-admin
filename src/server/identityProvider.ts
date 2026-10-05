@@ -371,8 +371,10 @@ export async function checkDiscovery(
   const doc = document as Record<string, unknown>;
   const problems: string[] = [];
   const issuer = draft.issuer.trim();
-  if (doc.issuer !== issuer) {
-    problems.push(`The document's issuer is "${String(doc.issuer)}". GeoLibre compares it exactly, so use that value.`);
+  if (typeof doc.issuer !== "string") {
+    problems.push("The document's issuer is missing or not a string. GeoLibre compares it exactly.");
+  } else if (doc.issuer !== issuer) {
+    problems.push(`The document's issuer is "${doc.issuer}". GeoLibre compares it exactly, so use that value.`);
   }
   const endpointKeys = ["authorization_endpoint", "token_endpoint", "jwks_uri"] as const;
   for (const key of endpointKeys) {
