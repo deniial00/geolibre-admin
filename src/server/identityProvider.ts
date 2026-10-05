@@ -374,12 +374,8 @@ export async function checkDiscovery(
   if (doc.issuer !== issuer) {
     problems.push(`The document's issuer is "${String(doc.issuer)}". GeoLibre compares it exactly, so use that value.`);
   }
-  const endpointKeys = [
-    ["authorization_endpoint", "authorizationEndpoint"],
-    ["token_endpoint", "tokenEndpoint"],
-    ["jwks_uri", "jwksUri"],
-  ] as const;
-  for (const [key] of endpointKeys) {
+  const endpointKeys = ["authorization_endpoint", "token_endpoint", "jwks_uri"] as const;
+  for (const key of endpointKeys) {
     if (typeof doc[key] !== "string" || !isHttpsUrl(doc[key])) {
       problems.push(`${key} is missing or not an https URL.`);
     }
