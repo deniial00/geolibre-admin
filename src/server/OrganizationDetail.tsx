@@ -130,7 +130,7 @@ export function OrganizationSettingsForm({
   );
 }
 
-type Tab = "members" | "invitations" | "projects" | "single sign-on" | "settings";
+type Tab = "members" | "invitations" | "projects" | "sso" | "settings";
 
 export function OrganizationDetail({
   server,
@@ -149,7 +149,7 @@ export function OrganizationDetail({
 }) {
   const isAdmin = organization.role === "administrator";
   const tabs: Tab[] = isAdmin
-    ? ["members", "invitations", "projects", "single sign-on", "settings"]
+    ? ["members", "invitations", "projects", "sso", "settings"]
     : ["members", "projects"];
   const [tab, setTab] = useState<Tab>("members");
   const members = useAsync(() => server.organizationMembers(organization.id), [server, organization.id]);
@@ -192,7 +192,7 @@ export function OrganizationDetail({
               tab === option ? "border-accent font-medium text-text" : "border-transparent text-muted hover:text-text",
             )}
           >
-            {option}
+            {option === "sso" ? "Single Sign-On" : option}
           </button>
         ))}
       </div>
@@ -265,7 +265,7 @@ export function OrganizationDetail({
         </>
       ) : null}
 
-      {tab === "single sign-on" && isAdmin ? (
+      {tab === "sso" && isAdmin ? (
         <IdentityProviderPanel
           server={server}
           organization={organization}

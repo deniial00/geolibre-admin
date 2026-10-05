@@ -113,11 +113,11 @@ describe("GeoLibreServer", () => {
     expect(JSON.parse(init.body as string)).toEqual(body);
   });
 
-  it("explains when organization changes require a fresh sign-in", async () => {
+  it("explains when an API request requires a recent sign-in", async () => {
     const server = new GeoLibreServer("http://x.test", "tok", mockFetch(401, { error: "reauthentication_required" }));
     await expect(server.deleteIdentityProvider("org/1")).rejects.toMatchObject({
       status: 401,
-      message: "This organization requires a recent sign-in for administrator changes. Sign out and sign in again.",
+      message: "A recent sign-in is required for this request. Sign out and sign in again.",
     });
   });
 

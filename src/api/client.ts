@@ -215,7 +215,7 @@ export class GeoLibreServer {
         message = `This token lacks the ${error.requiredScope} scope.`;
       }
       if (message === "reauthentication_required") {
-        message = "This organization requires a recent sign-in for administrator changes. Sign out and sign in again.";
+        message = "A recent sign-in is required for this request. Sign out and sign in again.";
       }
       throw new ApiError(response.status, message);
     }
