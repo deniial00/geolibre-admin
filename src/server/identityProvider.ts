@@ -96,11 +96,23 @@ export const PRESETS: Record<PresetId, Preset> = {
 };
 
 export function detectPreset(issuer: string): PresetId {
-  if (/^https:\/\/login\.microsoftonline\.com\/[^/]+\/v2\.0\/?$/.test(issuer)) return "entra";
-  if (/^https:\/\/accounts\.google\.com\/?$/.test(issuer)) return "google";
-  if (/^https:\/\/[^/]+\.(okta|oktapreview|okta-emea)\.com(\/oauth2\/[^/]+)?\/?$/.test(issuer)) return "okta";
-  if (/^https:\/\/[^?#]+\/realms\/[^/?#]+\/?$/.test(issuer)) return "keycloak";
-  if (/^https:\/\/[^?#]+\/adfs\/?$/i.test(issuer)) return "adfs";
+  let url: URL;
+  try {
+    url = new URL(issuer);
+  } catch {
+    return "generic";
+  }
+  if (url.protocol !== "https:" || url.search || url.hash) return "generic";
+
+  const hostname = url.hostname.toLowerCase();
+  const path = url.pathname;
+  if (hostname === "login.microsoftonline.com" && !url.port && /^\/[^/]+\/v2\.0\/?$/.test(path)) return "entra";
+  if (hostname === "accounts.google.com" && !url.port && path === "/") return "google";
+  if (/^.+\.(okta|oktapreview|okta-emea)\.com$/.test(hostname) && (/^\/oauth2\/[^/]+\/?$/.test(path) || path === "/")) {
+    return "okta";
+  }
+  if (/\/realms\/[^/]+\/?$/.test(path)) return "keycloak";
+  if (/\/adfs\/?$/i.test(path)) return "adfs";
   return "generic";
 }
 
@@ -246,7 +258,7 @@ export function validateDraft(
 
   if (draft.endpointMode === "manual") {
     const endpoints = [draft.authorizationEndpoint.trim(), draft.tokenEndpoint.trim(), draft.jwksUri.trim()];
-    if (endpoints.some((endpoint) => !endpoint)) errors.endpoints = "set all three endpoints or none";
+    if (endpoints.some((endpoint) => !endpoint)) errors.endpoints = "set all three endpoints";
     else if (endpoints.some((endpoint) => !isHttpsUrl(endpoint))) {
       errors.endpoints = "identity provider endpoints must be https URLs";
     }

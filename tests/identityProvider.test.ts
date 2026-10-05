@@ -31,7 +31,7 @@ describe("identity provider drafts", () => {
     draft.clientSecret = "secret";
     draft.endpointMode = "manual";
     draft.authorizationEndpoint = "https://idp.example.org/authorize";
-    expect(validateDraft(draft, { creating: true }).endpoints).toBe("set all three endpoints or none");
+    expect(validateDraft(draft, { creating: true }).endpoints).toBe("set all three endpoints");
     draft.endpointMode = "discovery";
     draft.scopes = ["email"];
     expect(validateDraft(draft, { creating: true }).scopes).toBe(
@@ -134,6 +134,7 @@ describe("identity provider drafts", () => {
     expect(detectPreset("https://login.microsoftonline.com/tenant/v2.0")).toBe("entra");
     expect(detectPreset("https://accounts.google.com")).toBe("google");
     expect(detectPreset("https://example.okta.com/oauth2/default")).toBe("okta");
+    expect(detectPreset("https://TENANT.OKTA.COM/oauth2/default")).toBe("okta");
     expect(detectPreset("https://idp.example.org/realms/acme")).toBe("keycloak");
     expect(detectPreset("https://adfs.example.org/adfs")).toBe("adfs");
     expect(detectPreset("https://login.example.org")).toBe("generic");
