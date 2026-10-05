@@ -54,7 +54,7 @@ export function IdentityProviderPanel({
     try {
       return await server.identityProvider(organization.id);
     } catch (error) {
-      if (error instanceof ApiError && error.status === 404 && error.message === "HTTP 404") {
+      if (error instanceof ApiError && error.status === 404) {
         throw new Error(
           "This server doesn't implement organization single sign-on (GeoLibre server API with identity-provider routes required).",
         );
@@ -77,9 +77,16 @@ export function IdentityProviderPanel({
   const toggle = useAction();
   const remove = useAction();
   const mutationBusy = save.busy || toggle.busy || remove.busy;
+  const clearMutationErrors = () => {
+    save.setError(null);
+    toggle.setError(null);
+    remove.setError(null);
+  };
+
 
   const beginEdit = (draft: IdentityProviderDraft) => {
     setSaved(false);
+    clearMutationErrors();
     invalidateDiscoveryCheck();
     setEditing(draft);
   };
@@ -200,6 +207,7 @@ export function IdentityProviderPanel({
           disabled={mutationBusy}
           onClick={() => {
             setSaved(false);
+            clearMutationErrors();
             void toggle.run(async () => {
               const draft = { ...draftFromProvider(p), enabled: !p.enabled };
               provider.setData(await server.setIdentityProvider(organization.id, toRequestBody(draft)));
@@ -213,6 +221,7 @@ export function IdentityProviderPanel({
           confirmLabel="Remove? Click again"
           onConfirm={() => {
             setSaved(false);
+            clearMutationErrors();
             void remove.run(async () => {
               await server.deleteIdentityProvider(organization.id);
               provider.setData(null);
@@ -256,6 +265,7 @@ export function IdentityProviderPanel({
           event.preventDefault();
           if (mutationBusy) return;
           setSaved(false);
+          clearMutationErrors();
           void save.run(async () => {
             const result = await server.setIdentityProvider(organization.id, toRequestBody(draft));
             provider.setData(result);
