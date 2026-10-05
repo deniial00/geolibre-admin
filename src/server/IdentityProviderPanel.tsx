@@ -55,6 +55,10 @@ export function IdentityProviderPanel({
       return await server.identityProvider(organization.id);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
+        const organizations = await server.myOrganizations();
+        if (!organizations.some((item) => item.id === organization.id)) {
+          throw new Error("This organization is no longer available to your account.");
+        }
         throw new Error(
           "This server doesn't implement organization single sign-on (GeoLibre server API with identity-provider routes required).",
         );
@@ -278,7 +282,7 @@ export function IdentityProviderPanel({
         <fieldset disabled={mutationBusy} className="contents">
         <section className="flex flex-col gap-4">
           <h3 className="text-sm font-semibold">Provider</h3>
-          <Field label="Provider">
+          <Field label="Provider" hint="Selecting a preset updates its suggested scopes and claim defaults. Review them before saving.">
             {(id) => (
               <Select
                 id={id}
@@ -427,7 +431,7 @@ export function IdentityProviderPanel({
             {draft.roleMappings.map((mapping) => (
               <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_12rem_auto]" key={mapping.id}>
                 <Input
-                  aria-label="Group claim value"
+                  aria-label="Role claim value"
                   value={mapping.value}
                   onChange={(event) => update({ roleMappings: draft.roleMappings.map((item) => item.id === mapping.id ? { ...item, value: event.target.value } : item) })}
                 />
