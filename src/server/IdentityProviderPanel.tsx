@@ -18,6 +18,7 @@ import {
   checkDiscovery,
   detectPreset,
   discoveryUrl,
+  createMappingDraftId,
   draftFromProvider,
   emptyDraft,
   toRequestBody,
@@ -233,7 +234,19 @@ export function IdentityProviderPanel({
   const renderForm = (draft: IdentityProviderDraft) => {
     const creating = provider.data === null;
     const errors = validateDraft(draft, { creating });
-    const update = (patch: Partial<IdentityProviderDraft>) => setEditing({ ...draft, ...patch });
+    const update = (patch: Partial<IdentityProviderDraft>) => {
+      if (
+        "issuer" in patch ||
+        "tokenEndpointAuthMethod" in patch ||
+        "scopes" in patch ||
+        "usernameClaim" in patch ||
+        "emailClaim" in patch ||
+        "groupsClaim" in patch
+      ) {
+        invalidateDiscoveryCheck();
+      }
+      setEditing({ ...draft, ...patch });
+    };
 
     return (
       <form
@@ -257,7 +270,14 @@ export function IdentityProviderPanel({
           <h3 className="text-sm font-semibold">Provider</h3>
           <Field label="Provider">
             {(id) => (
-              <Select id={id} value={draft.preset} onChange={(event) => setEditing(applyPreset(draft, event.target.value as PresetId))}>
+              <Select
+                id={id}
+                value={draft.preset}
+                onChange={(event) => {
+                  invalidateDiscoveryCheck();
+                  setEditing(applyPreset(draft, event.target.value as PresetId));
+                }}
+              >
                 {PRESET_IDS.map((preset) => <option key={preset} value={preset}>{PRESETS[preset].label}</option>)}
               </Select>
             )}
@@ -288,10 +308,7 @@ export function IdentityProviderPanel({
                     className="min-w-0 flex-1"
                     value={draft.issuer}
                     placeholder={PRESETS[draft.preset].issuerPlaceholder}
-                    onChange={(event) => {
-                      invalidateDiscoveryCheck();
-                      update({ issuer: event.target.value });
-                    }}
+                    onChange={(event) => update({ issuer: event.target.value })}
                   />
                   <Button disabled={Boolean(errors.issuer) || checking} onClick={runDiscoveryCheck}>
                     {checking ? "Checking…" : "Check issuer"}
@@ -376,6 +393,11 @@ export function IdentityProviderPanel({
               {(id) => <Input id={id} value={draft.groupsClaim} onChange={(event) => update({ groupsClaim: event.target.value })} />}
             </Field>
           </div>
+
+          {draft.groupMappings.length > 0 && !draft.groupsClaim.trim() ? (
+            <Notice tone="warning">Group mappings will never match without a groups claim.</Notice>
+          ) : null}
+
         </section>
 
         <section className="flex flex-col gap-4">
@@ -413,7 +435,7 @@ export function IdentityProviderPanel({
               The highest-ranked matching role wins. With any mapping set, existing members' roles follow it at every sign-in (the last and break-glass administrators are never demoted).
             </p>
             {errors.roleMappings ? <p className="text-xs text-danger">{errors.roleMappings}</p> : null}
-            <div><Button size="sm" onClick={() => update({ roleMappings: [...draft.roleMappings, { id: crypto.randomUUID(), value: "", role: "member" }]})}>Add role mapping</Button></div>
+            <div><Button size="sm" onClick={() => update({ roleMappings: [...draft.roleMappings, { id: createMappingDraftId(), value: "", role: "member" }] })}>Add role mapping</Button></div>
           </div>
           <div className="flex flex-col gap-2">
             <h4 className="text-sm font-medium">Group mappings</h4>
@@ -444,7 +466,7 @@ export function IdentityProviderPanel({
             </p>
             {errors.groupMappings ? <p className="text-xs text-danger">{errors.groupMappings}</p> : null}
             <div>
-              <Button size="sm" disabled={!groups.length} onClick={() => update({ groupMappings: [...draft.groupMappings, { id: crypto.randomUUID(), value: "", groupId: "" }] })}>Add group mapping</Button>
+              <Button size="sm" disabled={!groups.length} onClick={() => update({ groupMappings: [...draft.groupMappings, { id: createMappingDraftId(), value: "", groupId: "" }] })}>Add group mapping</Button>
             </div>
           </div>
         </section>

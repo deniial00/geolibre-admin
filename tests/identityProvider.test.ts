@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { IdentityProvider } from "../src/api/client";
 import {
   PRESETS,
@@ -81,7 +81,7 @@ describe("identity provider drafts", () => {
     expect("preset" in body).toBe(false);
     expect("endpointMode" in body).toBe(false);
   });
-  it("keeps saved endpoints on edits and strips stable row IDs from request bodies", () => {
+  it("keeps saved endpoints and strips mapping IDs without secure-context crypto", () => {
     const provider: IdentityProvider = {
       issuer: "https://idp.example.org/realms/acme",
       clientId: "geolibre",
@@ -108,7 +108,14 @@ describe("identity provider drafts", () => {
       redirectUri: null,
       updatedAt: "2026-10-04T00:00:00Z",
     };
-    const draft = draftFromProvider(provider);
+    const draft = (() => {
+      vi.stubGlobal("crypto", {} as Crypto);
+      try {
+        return draftFromProvider(provider);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    })();
     const body = toRequestBody(draft);
     const rowIds = [...draft.roleMappings, ...draft.groupMappings].map((mapping) => mapping.id);
     expect(draft.endpointMode).toBe("manual");

@@ -105,6 +105,12 @@ export function detectPreset(issuer: string): PresetId {
 }
 
 export type EndpointMode = "discovery" | "manual";
+let nextMappingDraftId = 0;
+
+export function createMappingDraftId(): string {
+  return `mapping-${++nextMappingDraftId}`;
+}
+
 type DraftRoleMapping = RoleMapping & { id: string };
 type DraftGroupMapping = GroupMapping & { id: string };
 
@@ -187,8 +193,8 @@ export function draftFromProvider(provider: IdentityProvider): IdentityProviderD
     emailClaim: provider.emailClaim,
     groupsClaim: provider.groupsClaim ?? "",
     defaultRole: provider.defaultRole,
-    roleMappings: provider.roleMappings.map((mapping) => ({ ...mapping, id: crypto.randomUUID() })),
-    groupMappings: provider.groupMappings.map((mapping) => ({ ...mapping, id: crypto.randomUUID() })),
+    roleMappings: provider.roleMappings.map((mapping) => ({ ...mapping, id: createMappingDraftId() })),
+    groupMappings: provider.groupMappings.map((mapping) => ({ ...mapping, id: createMappingDraftId() })),
     requireMfa: provider.requireMfa,
     allowBuiltinAccounts: provider.allowBuiltinAccounts,
     breakGlassUsername: provider.breakGlassUsername ?? "",
