@@ -65,12 +65,16 @@ describe("identity provider drafts", () => {
     const draft = emptyDraft();
     draft.issuer = " https://idp.example.org/realms/a/ ";
     draft.clientId = " client ";
+    draft.usernameClaim = " preferred_username ";
+    draft.emailClaim = " email ";
     draft.groupsClaim = "";
     draft.roleMappings = [{ id: "role-1", value: " admins ", role: "administrator" }];
     draft.groupMappings = [{ id: "group-1", value: " team ", groupId: "org-group" }];
     const body = toRequestBody(draft);
     expect(body.issuer).toBe("https://idp.example.org/realms/a/");
     expect(body.clientId).toBe("client");
+    expect(body.usernameClaim).toBe("preferred_username");
+    expect(body.emailClaim).toBe("email");
     expect(body.roleMappings).toEqual([{ value: "admins", role: "administrator" }]);
     expect(body.groupMappings).toEqual([{ value: "team", groupId: "org-group" }]);
     expect(body.groupsClaim).toBeNull();
