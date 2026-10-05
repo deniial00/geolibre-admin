@@ -137,6 +137,8 @@ describe("identity provider drafts", () => {
     expect(detectPreset("https://idp.example.org/realms/acme")).toBe("keycloak");
     expect(detectPreset("https://adfs.example.org/adfs")).toBe("adfs");
     expect(detectPreset("https://login.example.org")).toBe("generic");
+    expect(detectPreset("not-a-url/realms/acme")).toBe("generic");
+    expect(detectPreset("http://adfs.example.org/adfs")).toBe("generic");
   });
 
   it("checks discovery endpoints, exact issuer matching, and PKCE support", async () => {

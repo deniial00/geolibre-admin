@@ -99,8 +99,8 @@ export function detectPreset(issuer: string): PresetId {
   if (/^https:\/\/login\.microsoftonline\.com\/[^/]+\/v2\.0\/?$/.test(issuer)) return "entra";
   if (/^https:\/\/accounts\.google\.com\/?$/.test(issuer)) return "google";
   if (/^https:\/\/[^/]+\.(okta|oktapreview|okta-emea)\.com(\/oauth2\/[^/]+)?\/?$/.test(issuer)) return "okta";
-  if (/\/realms\/[^/]+\/?$/.test(issuer)) return "keycloak";
-  if (/\/adfs\/?$/i.test(issuer)) return "adfs";
+  if (/^https:\/\/[^?#]+\/realms\/[^/?#]+\/?$/.test(issuer)) return "keycloak";
+  if (/^https:\/\/[^?#]+\/adfs\/?$/i.test(issuer)) return "adfs";
   return "generic";
 }
 

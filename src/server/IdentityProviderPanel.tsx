@@ -163,7 +163,7 @@ export function IdentityProviderPanel({
           ) : "None"}
         </DefinitionRow>
         <DefinitionRow label="MFA required">{p.requireMfa ? "Yes" : "No"}</DefinitionRow>
-        <DefinitionRow label="Password sign-in">{p.allowBuiltinAccounts ? "allowed" : `only ${p.breakGlassUsername}`}</DefinitionRow>
+        <DefinitionRow label="Password sign-in">{p.allowBuiltinAccounts ? "allowed" : `only ${p.breakGlassUsername ?? "the break-glass administrator"}`}</DefinitionRow>
         <DefinitionRow label="Break-glass administrator">{p.breakGlassUsername ?? "—"}</DefinitionRow>
       </dl>
 
@@ -187,7 +187,7 @@ export function IdentityProviderPanel({
 
       {!p.allowBuiltinAccounts ? (
         <Notice tone="warning">
-          Password sign-in is off for members. This console signs in with a password, so only {p.breakGlassUsername} can still use it for this organization.
+          Password sign-in is off for members. This console signs in with a password, so only {p.breakGlassUsername ?? "the break-glass administrator"} can still use it for this organization.
         </Notice>
       ) : null}
 
