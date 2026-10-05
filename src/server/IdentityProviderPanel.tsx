@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import {
   ApiError,
   ORGANIZATION_ROLES,
@@ -60,7 +60,7 @@ export function IdentityProviderPanel({
           throw new Error("This organization is no longer available to your account.");
         }
         throw new Error(
-          "This server doesn't implement organization single sign-on (GeoLibre server API with identity-provider routes required).",
+          "The server returned 404 while loading this organization's SSO configuration. Check the organization, retry, or verify that the server supports organization SSO.",
         );
       }
       throw error;
@@ -71,6 +71,7 @@ export function IdentityProviderPanel({
   const [saved, setSaved] = useState(false);
   const [discovery, setDiscovery] = useState<DiscoveryResult | null>(null);
   const [checking, setChecking] = useState(false);
+  const endpointsErrorId = useId();
   const discoveryCheckId = useRef(0);
   const invalidateDiscoveryCheck = () => {
     discoveryCheckId.current += 1;
@@ -377,16 +378,40 @@ export function IdentityProviderPanel({
             <>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Authorization endpoint">
-                  {(id) => <Input id={id} value={draft.authorizationEndpoint} onChange={(event) => update({ authorizationEndpoint: event.target.value })} />}
+                  {(id) => (
+                    <Input
+                      id={id}
+                      value={draft.authorizationEndpoint}
+                      onChange={(event) => update({ authorizationEndpoint: event.target.value })}
+                      aria-invalid={Boolean(errors.endpoints)}
+                      aria-describedby={errors.endpoints ? endpointsErrorId : undefined}
+                    />
+                  )}
                 </Field>
                 <Field label="Token endpoint">
-                  {(id) => <Input id={id} value={draft.tokenEndpoint} onChange={(event) => update({ tokenEndpoint: event.target.value })} />}
+                  {(id) => (
+                    <Input
+                      id={id}
+                      value={draft.tokenEndpoint}
+                      onChange={(event) => update({ tokenEndpoint: event.target.value })}
+                      aria-invalid={Boolean(errors.endpoints)}
+                      aria-describedby={errors.endpoints ? endpointsErrorId : undefined}
+                    />
+                  )}
                 </Field>
                 <Field label="JWKS URI">
-                  {(id) => <Input id={id} value={draft.jwksUri} onChange={(event) => update({ jwksUri: event.target.value })} />}
+                  {(id) => (
+                    <Input
+                      id={id}
+                      value={draft.jwksUri}
+                      onChange={(event) => update({ jwksUri: event.target.value })}
+                      aria-invalid={Boolean(errors.endpoints)}
+                      aria-describedby={errors.endpoints ? endpointsErrorId : undefined}
+                    />
+                  )}
                 </Field>
               </div>
-              {errors.endpoints ? <p role="alert" className="text-xs text-danger">{errors.endpoints}</p> : null}
+              {errors.endpoints ? <p id={endpointsErrorId} role="alert" className="text-xs text-danger">{errors.endpoints}</p> : null}
             </>
           ) : null}
         </section>
@@ -517,6 +542,7 @@ export function IdentityProviderPanel({
           />
         </section>
 
+        {/* The extra recovery hint depends on this server error text; the base error remains visible if it changes. */}
         {save.error ? (
           <Notice tone="danger">
             {save.error}
